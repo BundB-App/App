@@ -36,6 +36,7 @@
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
   --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{background:var(--bg);color:var(--ink)}
 body{margin:0;font:15px/1.5 var(--f-body);-webkit-text-size-adjust:100%}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
@@ -394,6 +395,7 @@ function similarity(a,b){
 /* ===================== PARSER-END ===================== */
 
 /* ===================== Zustand ===================== */
+const APP_URL='https://bundb-app.github.io/App/', REPO_URL='https://github.com/BundB-App/App';
 const LS_DATA='bb-lager-data-v1', LS_CFG='bb-lager-cfg-v1';
 const COLLS=['articles','movements','docs','rules'];
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
@@ -404,7 +406,7 @@ function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){
 function emptyState(){ return {articles:{},movements:{},docs:{},rules:{},meta:{v:1}}; }
 let S = Object.assign(emptyState(), lsGet(LS_DATA)||{});
 COLLS.forEach(c=>{ if(!S[c]) S[c]={}; });
-let CFG = Object.assign({appKey:'', base:'/BundB', ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
+let CFG = Object.assign({appKey:'', base:'/BundB App', ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
 
 function put(coll, obj){ obj.updatedAt = now(); S[coll][obj.id]=obj; return obj; }
 function del(coll, id){ const o=S[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); } }
@@ -1135,6 +1137,21 @@ function vSetup(){
           <div class="row"><input id="authCode" placeholder="Code aus Dropbox einfügen" style="flex:1 1 220px" autocomplete="off"><button class="btn primary" data-act="authCode">Code bestätigen</button></div>
         </div>`}
     </div>
+    <div class="panel stack"><h2>App weitergeben</h2>
+      <div class="grid">
+        <div><div class="eyebrow" style="margin-bottom:4px">App-Adresse</div>
+          <div class="row" style="gap:8px"><code id="appurl">${esc(APP_URL)}</code><button class="btn sm" data-act="copyText" data-target="appurl">Kopieren</button></div></div>
+        <div><div class="eyebrow" style="margin-bottom:4px">Programmcode (GitHub)</div>
+          <div class="row" style="gap:8px"><code id="repourl">${esc(REPO_URL)}</code><button class="btn sm" data-act="copyText" data-target="repourl">Kopieren</button></div></div>
+      </div>
+      <div><div class="eyebrow" style="margin-bottom:6px">Neuen Mitarbeiter einrichten</div>
+      <ol class="steps small">
+        <li>Dropbox-Ordner <code>${esc(CFG.base.replace(/^\//,''))}</code> mit ihm teilen, Recht „Kann bearbeiten“.</li>
+        <li>Einmalig in der Dropbox-App (dropbox.com/developers/apps → Einstellungen) „Enable additional users“ aktivieren.</li>
+        <li>Er öffnet die App-Adresse, auf dem iPhone in Safari → „Zum Home-Bildschirm“.</li>
+        <li>Einstellungen in der App: App key eintragen, Ordner eintragen (meist <code>${esc(CFG.base)}</code>), „Verbinden“ und mit seinem eigenen Dropbox-Konto anmelden.</li>
+      </ol></div>
+    </div>
     <div class="panel stack"><h2>Allgemein</h2>
       <div class="grid"><label class="f">Eigener Firmenname (wird beim Lesen von Rechnungen übersprungen)<input id="cfg-own" value="${esc(CFG.ownName)}"></label></div>
       <label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="cfg-auto" ${CFG.autoBook?'checked':''} style="margin-top:2px">
@@ -1194,6 +1211,9 @@ document.addEventListener('click', async e=>{
     case 'qbStep': QB.qty=Math.max(0,(Number(QB.qty)||0)+Number(el.dataset.step)); renderQB(); break;
     case 'qbReason': QB.reason=el.dataset.r; renderQB(); break;
     case 'qbBook': qbBook(); break;
+    case 'copyText': { const n=$('#'+el.dataset.target); const txt=n.textContent;
+      const fallback=()=>{ const r=document.createRange(); r.selectNodeContents(n); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); };
+      if(navigator.clipboard) navigator.clipboard.writeText(txt).then(()=>toast('Kopiert'), fallback); else fallback(); break; }
     case 'reset': {
       if(($('#resetWord').value||'').trim().toUpperCase()!=='NEUSTART'){ toast('Bitte zur Bestätigung NEUSTART eintippen.'); return; }
       S=emptyState(); S.meta={v:1, resetAt:now()}; lsSet(LS_DATA,S); QUEUE=[]; IMP=null; invCounts={}; XL=null;
