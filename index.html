@@ -185,6 +185,7 @@ code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radiu
 <div id="qbRoot"></div>
 <div class="toast" id="toast" hidden></div>
 <input type="file" id="filepick" accept="application/pdf,image/*,.xml,.csv,text/csv,text/xml" hidden>
+<input type="file" id="xlspick" accept=".xlsx,.xls,.ods,.csv,text/csv" hidden>
 <input type="file" id="jsonpick" accept=".json,application/json" hidden>
 
 <script>
@@ -422,6 +423,7 @@ function merge(a,b){
   }
   return out;
 }
+function dropBefore(st, t){ for(const c of COLLS){ for(const id of Object.keys(st[c]||{})){ if((st[c][id].updatedAt||0) <= t) delete st[c][id]; } } }
 function stockMap(){
   const m={}; for(const mv of live('movements')) m[mv.articleId]=(m[mv.articleId]||0)+Number(mv.qty||0);
   return m;
@@ -499,12 +501,20 @@ async function sync(){
   try{
     const before = JSON.stringify(S);
     const blob = await DBX.download(P('lager.json'));
-    if(blob){ const remote = JSON.parse(await blob.text()); S = merge(S, remote); }
+    let resetAt = (S.meta&&S.meta.resetAt)||0;
+    if(blob){
+      const remote = JSON.parse(await blob.text());
+      const rr = (remote.meta&&remote.meta.resetAt)||0, lr = resetAt;
+      // Neustart: alles, was vor dem Neustart entstanden ist, verwerfen (auf beiden Seiten)
+      if(rr>lr) dropBefore(S, rr); else if(lr>rr) dropBefore(remote, lr);
+      resetAt = Math.max(rr, lr);
+      S = merge(S, remote);
+    }
     else if(CFG.lastSync && !CFG.allowNew){
       throw new Error(`lager.json wurde in „${CFG.base}“ nicht gefunden. Wurde der Ordner umbenannt oder verschoben? Bitte unter Einstellungen den Ordner anpassen.`);
     }
     CFG.allowNew=false;
-    S.meta = {v:1, savedAt:now(), by:navigator.platform||''};
+    S.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
     await DBX.upload(P('lager.json'), JSON.stringify(S));
     lsSet(LS_DATA,S); CFG.lastSync=now(); saveCfg(); setSync('ok');
     if(JSON.stringify({...S,meta:0}) !== JSON.stringify({...JSON.parse(before),meta:0})) softRender();
@@ -795,6 +805,78 @@ function qbBook(){
 const QB_DIRTXT = q => q<0 ? '−' : '+';
 document.addEventListener('keydown', e=>{ if(QB && e.key==='Escape') qbClose(); if(QB && e.key==='Enter' && e.target.id==='qb-qty'){ e.preventDefault(); qbBook(); } });
 
+
+/* ===================== Bestand aus Excel / CSV ===================== */
+const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+let XL = null;   // {rows:[{name,cat,unit,qty,min,price,match}], file, date}
+async function readTable(file){
+  const lower=file.name.toLowerCase();
+  if(/\.(xlsx|xlsm|xls|ods)$/.test(lower)){
+    await loadScript(XLSX_URL);
+    const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:''}).map(r=>r.map(c=>String(c??'').trim()));
+  }
+  const text=(await file.text()).replace(/^﻿/,'');
+  const first=text.split(/\r?\n/)[0]; const delim=[';','\t',','].map(d=>[d,first.split(d).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  return text.split(/\r?\n/).filter(l=>l.trim()).map(l=>{ const out=[]; let cell='',q=false; for(let i=0;i<l.length;i++){ const c=l[i];
+    if(q){ if(c==='"'){ if(l[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; } else if(c==='"') q=true; else if(c===delim){ out.push(cell.trim()); cell=''; } else cell+=c; }
+    out.push(cell.trim()); return out; });
+}
+function parseStockTable(rows){
+  let hi=-1, H=[];
+  for(let i=0;i<Math.min(rows.length,15);i++){ const h=rows[i].map(normText); if(h.some(x=>/artikel|bezeichnung|^name|produkt/.test(x)) && h.some(x=>/bestand|menge|anzahl|stück|stueck|^ist/.test(x))){ hi=i; H=h; break; } }
+  if(hi<0) return null;
+  const find=(rx,not)=>H.findIndex(h=>rx.test(h) && !(not&&not.test(h)));
+  const c={ min:find(/mindest|^min/), name:find(/artikel|bezeichnung|^name|produkt/,/nr|nummer/), cat:find(/kategorie|gruppe|warengruppe/),
+    unit:find(/einheit|^me$/), price:find(/ek|einkauf|preis/) };
+  c.qty = H.findIndex((h,i)=>/bestand|menge|anzahl|stück|stueck|^ist/.test(h) && i!==c.min);
+  const out=[];
+  for(const r of rows.slice(hi+1)){
+    const name=(r[c.name]||'').trim(); if(!name) continue;
+    const qty=parseNum(r[c.qty]);
+    out.push({name, cat:c.cat>=0?r[c.cat]:'', unit:c.unit>=0?r[c.unit]:'', qty:isNaN(qty)?null:qty,
+      min:c.min>=0?parseNum(r[c.min]):NaN, price:c.price>=0?parseNum(r[c.price]):NaN});
+  }
+  return out;
+}
+async function loadXl(file){
+  try{
+    const rows=await readTable(file); const items=parseStockTable(rows);
+    if(!items||!items.length){ toast('Keine Spalten „Artikel“ und „Bestand“ gefunden. Vorlage verwenden.'); return; }
+    items.forEach(it=>{ const a=live('articles').find(x=>normText(x.name)===normText(it.name)); it.match=a?a.id:''; it.on = it.qty!==null; });
+    XL={rows:items, file:file.name}; render();
+  }catch(e){ toast(e.message); }
+}
+function bookXl(){
+  const date=$('#xlDate')?.value||today(); const st=stockMap(); let nNew=0,nMv=0;
+  for(const it of XL.rows){ if(!it.on) continue;
+    let a = it.match ? S.articles[it.match] : live('articles').find(x=>normText(x.name)===normText(it.name));
+    if(!a){ a=put('articles',{id:uid(), name:it.name, unit:it.unit||'Stk', category:it.cat||'', min:isNaN(it.min)?0:it.min, lastPrice:isNaN(it.price)?0:it.price}); nNew++; }
+    else { if(it.unit) a.unit=it.unit; if(it.cat) a.category=it.cat; if(!isNaN(it.min)) a.min=it.min; if(!isNaN(it.price)) a.lastPrice=it.price; put('articles',a); }
+    const diff = Math.round(((it.qty||0)-(st[a.id]||0))*1000)/1000;
+    if(diff!==0){ put('movements',{id:uid(), articleId:a.id, qty:diff, type:'inv', date, note:'Anfangsbestand (Import)'}); nMv++; }
+  }
+  persist(); XL=null; view='bestand'; render(); toast(`Bestand übernommen: ${nNew} neue Artikel, ${nMv} Buchungen`);
+}
+function vXl(){
+  const st=stockMap(); const on=XL.rows.filter(r=>r.on).length;
+  return `<div class="stack">
+    <div><div class="eyebrow">${esc(XL.file)}</div><h1>Bestand übernehmen</h1></div>
+    <p class="muted" style="margin:0">Die App setzt den Bestand jedes Artikels auf den Wert aus der Tabelle. Fehlende Artikel werden angelegt.</p>
+    <div class="panel tbl"><table><thead><tr><th></th><th>Artikel</th><th>Kategorie</th><th class="r">Bestand neu</th><th class="r">bisher</th><th>Status</th></tr></thead><tbody>
+    ${XL.rows.map((r,i)=>`<tr><td><input type="checkbox" data-xl="${i}" ${r.on?'checked':''} ${r.qty===null?'disabled':''} aria-label="übernehmen"></td>
+      <td>${esc(r.name)}</td><td class="small muted">${esc(r.cat)}</td>
+      <td class="r num">${r.qty===null?'<span class="pill bad">fehlt</span>':fmt(r.qty)+' <span class="small muted">'+esc(r.unit)+'</span>'}</td>
+      <td class="r num muted">${r.match?fmt(st[r.match]||0):'–'}</td>
+      <td>${r.match?'<span class="pill">vorhanden</span>':'<span class="pill ok">neu</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="row"><label class="f" style="width:170px">Stichtag<input type="date" id="xlDate" value="${today()}"></label>
+      <button class="btn primary" data-act="xlBook" style="align-self:end">${on} Positionen übernehmen</button>
+      <button class="btn" data-act="xlCancel" style="align-self:end">Abbrechen</button></div>
+  </div>`;
+}
+
 /* ===================== Ansichten ===================== */
 let view = 'bestand';
 let openArt = null, search='', onlyLow=false, mvFilter='', addingArt=false;
@@ -998,9 +1080,13 @@ function vBuchungen(){
 }
 
 function vInventur(){
+  if(XL) return vXl();
   const st = stockMap();
   const arts = live('articles').sort((a,b)=>(a.category||'').localeCompare(b.category||'')||a.name.localeCompare(b.name));
-  if(!arts.length) return `<div class="stack"><h1>Inventur</h1><div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
+  const importBox = `<div class="panel stack"><div class="row spread"><h2>Bestand aus Excel übernehmen</h2>
+      <div class="row"><button class="btn" data-act="xlTemplate">Vorlage laden</button><button class="btn primary" data-act="xlPick">Excel/CSV wählen</button></div></div>
+      <p class="small muted" style="margin:0">Spalten: Artikel, Bestand, optional Kategorie, Einheit, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt.</p></div>`;
+  if(!arts.length) return `<div class="stack"><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
   const rows = arts.map(a=>{ const soll=st[a.id]||0; const v=invCounts[a.id]; const has=v!==undefined && v!=='';
     const diff = has ? parseNum(v)-soll : null;
     return `<tr><td>${esc(a.name)}<br><span class="small muted">${esc(a.category||'')}</span></td>
@@ -1009,6 +1095,7 @@ function vInventur(){
       <td class="r num" id="diff-${a.id}">${diff===null||isNaN(diff)?'':`<b class="${diff>=0?'plus':'minus'}">${diff>0?'+':''}${fmt(diff)}</b>`}</td></tr>`; }).join('');
   return `<div class="stack">
     <div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
+    ${importBox}
     <p class="muted" style="margin:0">Trage den gezählten Bestand ein. Leere Felder bleiben unverändert. Beim Buchen wird die Differenz als Inventurbuchung erfasst${DBX.connected?' und ein Protokoll im Ordner <code>Inventur</code> abgelegt':''}.</p>
     <div class="panel tbl"><table><thead><tr><th>Artikel</th><th class="r">Soll</th><th class="r">Ist</th><th class="r">Differenz</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="row"><label class="f" style="width:170px">Stichtag<input type="date" id="invDate" value="${today()}"></label>
@@ -1059,6 +1146,12 @@ function vSetup(){
         <td class="r"><button class="btn sm danger" data-act="delRule" data-id="${esc(r.id)}" data-confirm="Löschen?">Löschen</button></td></tr>`).join('')}</tbody></table></div>`
       :'<div class="small muted">Entsteht automatisch beim Buchen von Belegen.</div>'}
     </div>
+    <div class="panel stack"><h2>Neustart mit echtem Bestand</h2>
+      <p style="margin:0">Löscht <b>alle</b> Artikel, Buchungen, Belegliste und gelernten Zuordnungen, auf diesem Gerät und in der Dropbox. Alle anderen Geräte übernehmen den Neustart beim nächsten Sync automatisch. Belege in den Dropbox-Ordnern bleiben unberührt.</p>
+      <p class="small muted" style="margin:0">Tipp: Vorher „Als JSON sichern“. Danach den Bestand unter <b>Inventur → Bestand aus Excel übernehmen</b> einlesen.</p>
+      <div class="row"><input id="resetWord" placeholder="Zum Bestätigen NEUSTART eintippen" autocomplete="off" style="flex:1 1 220px">
+        <button class="btn danger" data-act="reset">Alles löschen und neu starten</button></div>
+    </div>
     <div class="panel stack"><h2>Datensicherung</h2>
       <div class="row"><button class="btn" data-act="export">Als JSON sichern</button><button class="btn" data-act="import">JSON einspielen</button>
         <button class="btn danger" data-act="wipe" data-confirm="Alle Daten auf diesem Gerät löschen?">Lokale Daten löschen</button></div>
@@ -1101,6 +1194,17 @@ document.addEventListener('click', async e=>{
     case 'qbStep': QB.qty=Math.max(0,(Number(QB.qty)||0)+Number(el.dataset.step)); renderQB(); break;
     case 'qbReason': QB.reason=el.dataset.r; renderQB(); break;
     case 'qbBook': qbBook(); break;
+    case 'reset': {
+      if(($('#resetWord').value||'').trim().toUpperCase()!=='NEUSTART'){ toast('Bitte zur Bestätigung NEUSTART eintippen.'); return; }
+      S=emptyState(); S.meta={v:1, resetAt:now()}; lsSet(LS_DATA,S); QUEUE=[]; IMP=null; invCounts={}; XL=null;
+      if(DBX.connected){ CFG.allowNew=true; saveCfg(); try{ await DBX.upload(P('lager.json'), JSON.stringify(S)); CFG.lastSync=now(); saveCfg(); setSync('ok'); }catch(err){ toast('Neustart lokal erledigt, Dropbox nicht erreichbar: '+err.message); } }
+      view='inventur'; render(); toast('Neustart erledigt. Jetzt den Bestand einlesen.'); scanInbox(false); break; }
+    case 'xlPick': $('#xlspick').click(); break;
+    case 'xlCancel': XL=null; render(); break;
+    case 'xlBook': bookXl(); break;
+    case 'xlTemplate': {
+      const csv='\uFEFF'+['Artikel;Kategorie;Einheit;Bestand;Mindestbestand;EK-Preis netto','Cola 0,33l;Alkoholfrei;Fl;48;24;0,70'].join('\r\n');
+      const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='Vorlage_Lagerbestand.csv'; document.body.appendChild(a); a.click(); a.remove(); break; }
     case 'saveBase': {
       const v='/'+$('#cfg-base2').value.trim().replace(/^\/+|\/+$/g,''); if(v==='/'){ toast('Bitte einen Ordner angeben.'); return; }
       CFG.base=v; saveCfg(); QUEUE=[]; inboxCache={in:null,out:null,err:''};
@@ -1181,6 +1285,7 @@ document.addEventListener('input', e=>{
 });
 document.addEventListener('change', e=>{
   const t=e.target;
+  if(t.dataset.xl!==undefined && XL){ XL.rows[+t.dataset.xl].on=t.checked; render(); return; }
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
@@ -1200,6 +1305,7 @@ document.addEventListener('submit', e=>{
   addingArt=false; persist(); render(); toast('Artikel angelegt');
 });
 $('#filepick').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) importFile(f, dir, null); });
+$('#xlspick').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadXl(f); });
 $('#jsonpick').addEventListener('change', async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
   try{ const d=JSON.parse(await f.text()); S=merge(S,d); persist(); render(); toast('Sicherung eingespielt'); }catch(err){ toast('Datei ist keine gültige Sicherung.'); } });
 function bindDrop(){

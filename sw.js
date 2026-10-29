@@ -2,7 +2,7 @@
    App-Dateien: zuerst Netz (max. 3 s), sonst gespeicherte Version.
    Bibliotheken (PDF-Leser, Texterkennung, Schriften): einmal laden, dann aus dem Speicher.
    Dropbox wird nie zwischengespeichert. */
-const APP_CACHE = 'bb-lager-app-v6';
+const APP_CACHE = 'bb-lager-app-v7';
 const LIB_CACHE = 'bb-lager-lib-v1';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 const LIB_HOSTS = /(^|\.)(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|tessdata\.projectnaptha\.com)$/;
