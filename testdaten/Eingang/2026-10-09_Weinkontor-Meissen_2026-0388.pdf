@@ -1,0 +1,185 @@
+%PDF-1.3
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 1
+/Kids [ 4 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+/Outlines 9 0 R
+/Names 12 0 R
+>>
+endobj
+4 0 obj
+<<
+/Contents 5 0 R
+/MediaBox [ 0 0 595.2756 841.8898 ]
+/Resources <<
+/Font 6 0 R
+/ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>>
+/Rotate 0
+/Trans <<
+>>
+/Type /Page
+/Parent 2 0 R
+>>
+endobj
+5 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ]
+/Length 1114
+>>
+stream
+Gat%b9og2Q&;KZL'm83[m](83G53YtTTI\r1XTq[6<_X1),/KeR#u(qM-h?I1BI58e!!EHXEn5T4]Q><JHH-n^/#\ui<8"e7R.!<"X#OOaW6<en!\A"W1%jU?H!]_V3uMD+W07,&k9cL"+O!m)-5KgD'Rj5nki$>_k/XY+!uK.>S/MKg2\NX)/I&&3n"q,f!FhZ!.m_7%<0g#S9HqFIN;LBJ*()^K23_KJo`-4/iQ;Wm!WY^D&%,XA@(mspE>L0q,$1,&(NkP*A=f)R71qfGBr-l]SC2BIE4dsQQ+g0=,(F'Cnp17SV'_cn)frR"e]Z];,#lIKlcC4>\!QeT9`n-MI3&$M)/+#[Aj(Gg'tbap&P:4HGHAbf?67&,]lcso=Wdq4off.Sd6rjT1R2hY4N)DHRro8mUbHsc*Gd9\0KN`s1@)m:W+a&V3@bsr\7HTL2gLOA/K=9D9^ELI!Mh?Vjb#)Opna0pHB93K1&s!WCXH$UG=BK=`m7Hlgj_&jP\Y9d?bjf'N[sGreeSMI[>!$NC#s5=[k^afRT-N.4`VfD%5NtZhUCm&[>M?mtlI08n+\#+aAe#gnR:,;#9"Z$jBUMqm>npG\5I:UK^bT97g=OZ=BENSP"JuG;p8d4gOJ)9Lc[i2i*E.hC`)Ih(:U+'o!$hiu]cI^o"rsJWSMmIjUX7`m9^/W1**`Yn(mtiF0?FPR?<&\<SK80i"M@+fE^7F1mgeGdK*P]pS+q9'V`Ll,0"q:BuQc(NW5Hs2f9D<u&s=^3UaS<dl(DSa!$!rH-M%Qe>]VBtSDLFd7HN9275cm.$t<(l]3b<q(4hGjk1L;G:Q6TD>_7(DXl*"dngD\1Kjer+%1bXls*$X_=,FrK%@Dj-j:S023d<lg-gk\R[N1JueP15-:YopWM"qe!K.7%8P&#J`?H:*:Gg*&&D>t[d0f19M%'XRB`s$rO!&)1+eMBFZ:(N#3^MgqsWRFirVFmOXQ>sVTb=7`nPMFQ>qcG`B!NibR589IH\iueN0ZcF--ZY3MtbQgnWB3Z1[X4pg:a?cgh?Q#X0m4oaHpi;SRQe]*o`Ec49`'_(ZD#Da)Ih0].WeG,8Pl(rjuW<nle+aq*A-!9=X.[f~>
+endstream
+endobj
+6 0 obj
+<<
+/F1 7 0 R
+/F2 8 0 R
+>>
+endobj
+7 0 obj
+<<
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
+/Type /Font
+>>
+endobj
+8 0 obj
+<<
+/BaseFont /Helvetica-Bold
+/Encoding /WinAnsiEncoding
+/Name /F2
+/Subtype /Type1
+/Type /Font
+>>
+endobj
+9 0 obj
+<<
+>>
+endobj
+10 0 obj
+<<
+/Type /EmbeddedFile
+/Length 6029
+>>
+stream
+<?xml version="1.0" encoding="UTF-8"?>
+<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+  <rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>
+  <rsm:ExchangedDocument><ram:ID>2026-0388</ram:ID><ram:TypeCode>380</ram:TypeCode><ram:IssueDateTime><udt:DateTimeString format="102">20261009</udt:DateTimeString></ram:IssueDateTime></rsm:ExchangedDocument>
+  <rsm:SupplyChainTradeTransaction>
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>1</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:SellerAssignedID>W-2201</ram:SellerAssignedID><ram:Name>Riesling trocken 0,75l</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>7.40</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">36</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>19</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>266.40</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>2</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:SellerAssignedID>W-2310</ram:SellerAssignedID><ram:Name>Sp√§tburgunder Ros√© 0,75l</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>7.90</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">24</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>19</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>189.60</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>3</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:SellerAssignedID>W-4100</ram:SellerAssignedID><ram:Name>Winzersekt brut 0,75l</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>9.80</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">30</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>19</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>294.00</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>
+    <ram:IncludedSupplyChainTradeLineItem>
+      <ram:AssociatedDocumentLineDocument><ram:LineID>4</ram:LineID></ram:AssociatedDocumentLineDocument>
+      <ram:SpecifiedTradeProduct><ram:SellerAssignedID>W-9001</ram:SellerAssignedID><ram:Name>Traubensaft rot 1,0l</ram:Name></ram:SpecifiedTradeProduct>
+      <ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>3.10</ram:ChargeAmount></ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement>
+      <ram:SpecifiedLineTradeDelivery><ram:BilledQuantity unitCode="C62">12</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>
+      <ram:SpecifiedLineTradeSettlement>
+        <ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>19</ram:RateApplicablePercent></ram:ApplicableTradeTax>
+        <ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>37.20</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>
+      </ram:SpecifiedLineTradeSettlement>
+    </ram:IncludedSupplyChainTradeLineItem>
+    <ram:ApplicableHeaderTradeAgreement>
+      <ram:SellerTradeParty><ram:Name>Weinkontor Mei√üen</ram:Name></ram:SellerTradeParty>
+      <ram:BuyerTradeParty><ram:Name>B&amp;B Eventagentur</ram:Name></ram:BuyerTradeParty>
+    </ram:ApplicableHeaderTradeAgreement>
+    <ram:ApplicableHeaderTradeSettlement>
+      <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+      <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+        <ram:LineTotalAmount>787.20</ram:LineTotalAmount><ram:TaxBasisTotalAmount>787.20</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="EUR">149.57</ram:TaxTotalAmount><ram:GrandTotalAmount>936.77</ram:GrandTotalAmount><ram:DuePayableAmount>936.77</ram:DuePayableAmount>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+    </ram:ApplicableHeaderTradeSettlement>
+  </rsm:SupplyChainTradeTransaction>
+</rsm:CrossIndustryInvoice>
+
+endstream
+endobj
+11 0 obj
+<<
+/Type /Filespec
+/F (factur\055x\056xml)
+/EF <<
+/F 10 0 R
+>>
+>>
+endobj
+12 0 obj
+<<
+/EmbeddedFiles 13 0 R
+>>
+endobj
+13 0 obj
+<<
+/Names [ (factur\055x\056xml) 11 0 R ]
+>>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000054 00000 n 
+0000000113 00000 n 
+0000000192 00000 n 
+0000000391 00000 n 
+0000001597 00000 n 
+0000001638 00000 n 
+0000001745 00000 n 
+0000001857 00000 n 
+0000001878 00000 n 
+0000007980 00000 n 
+0000008062 00000 n 
+0000008106 00000 n 
+trailer
+<<
+/Size 14
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+8167
+%%EOF
