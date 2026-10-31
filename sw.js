@@ -2,13 +2,13 @@
    App-Dateien: zuerst Netz (max. 3 s), sonst gespeicherte Version.
    Bibliotheken (PDF-Leser, Texterkennung, Schriften): einmal laden, dann aus dem Speicher.
    Dropbox wird nie zwischengespeichert. */
-const APP_CACHE = 'bb-lager-app-v10';
+const APP_CACHE = 'bb-lager-app-v11';
 const LIB_CACHE = 'bb-lager-lib-v1';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 const LIB_HOSTS = /(^|\.)(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|tessdata\.projectnaptha\.com)$/;
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(APP_CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(APP_CACHE).then(c => c.addAll(CORE.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -43,7 +43,8 @@ self.addEventListener('fetch', e => {
   // Eigene App-Dateien: Netz zuerst, damit Updates ankommen; bei Funkloch die gespeicherte Version
   if (url.origin === self.location.origin) {
     e.respondWith(
-      withTimeout(fetch(req), 3000)
+      // no-cache: am Server nachfragen statt der 10-Minuten-Zwischenspeicherung von GitHub Pages zu vertrauen
+      withTimeout(fetch(req, { cache: 'no-cache' }), 3000)
         .then(res => {
           if (res && res.ok) { const copy = res.clone(); caches.open(APP_CACHE).then(c => c.put(req, copy)); }
           return res;
