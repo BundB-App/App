@@ -69,7 +69,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
   - `Eingang/_Neu`, `Ausgang/_Neu` – Posteingang; die App liest dort beim Start und bei Rückkehr in den Vordergrund automatisch ein
   - `Eingang/<Jahr>`, `Ausgang/<Jahr>` – Archiv nach dem Buchen (nur Ablage, für den Bestand nicht nötig)
   - `Inventur/` – CSV-Protokolle der Inventuren
-  - `App/` – Kopie der App-Dateien (Altlast, nicht mehr nötig; maßgeblich ist das Repository)
+  - `App/` – Kopie der App-Dateien, wird bei jedem Release mitgespiegelt (maßgeblich ist das Repository)
   - `Vorlage_Lagerbestand.xlsx` – Vorlage für den Bestandsimport
 - Dropbox-App: „Scoped access“, „Full Dropbox“, Rechte `files.metadata.read`, `files.content.read`, `files.content.write`. App key wird pro Gerät in der App eingetragen, steht **nicht** im Code. „Enable additional users“ ist für Mitarbeiter nötig.
 
@@ -77,8 +77,9 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 
 1. Änderung auf einem Branch machen, testen (unten).
 2. **In `sw.js` `APP_CACHE` hochzählen** (`bb-lager-app-vN`) – sonst bekommen installierte Geräte das Update nicht zuverlässig.
-3. Nach `main` mergen/pushen. Geräte holen das Update beim nächsten Öffnen mit Netz.
-4. Thomas kurz sagen, was neu ist und ob er etwas tun muss.
+3. **Sofort live, ohne Rückfrage** (Wunsch von Thomas): nach dem Test nach `main` mergen/pushen. Geräte holen das Update beim nächsten Öffnen mit Netz.
+4. Direkt danach die App-Dateien (`index.html`, `sw.js`, `manifest.webmanifest`, `icon-*.png`) nach `~/Library/CloudStorage/Dropbox/BundB App/App/` kopieren und mit `cmp` prüfen (keine `tests/`, `testdaten/`, `CLAUDE.md`).
+5. Thomas kurz sagen, was neu ist und ob er etwas tun muss.
 
 ## Tests
 
