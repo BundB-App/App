@@ -118,6 +118,18 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:9px 12px;border-radius:6px;font-size:14px}
+/* Startseite: Auswahl der Bereiche */
+body[data-area="home"] nav.tabs, body[data-area="home"] .fab, body[data-area="personal"] nav.tabs, body[data-area="personal"] .fab{display:none}
+body[data-area="home"] main, body[data-area="personal"] main{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
+body[data-area="home"] .sync, body[data-area="personal"] .sync{margin-left:auto}
+.brand{background:none;border:0;padding:0;color:inherit;cursor:pointer;text-align:left}
+.modules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.module{display:grid;gap:10px;align-content:start;text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:22px 20px;cursor:pointer;font:inherit;min-height:170px}
+.module:hover{border-color:var(--accent)}
+.module:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.module b{font:700 40px/1 var(--f-display);letter-spacing:.01em}
+.module .tag{justify-self:start;font:600 11px/1 var(--f-body);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:6px;background:var(--accent-soft);color:var(--ink)}
+.module .tag.soon{background:var(--sunk);color:var(--muted)}
 .tbl{overflow-x:auto} table{border-collapse:collapse;width:100%} th,td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:middle}
 th{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-top:0}
 td.r,th.r{text-align:right}
@@ -171,7 +183,7 @@ code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radiu
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <div class="brand">B&amp;B<small>Lager</small></div>
+  <button class="brand" data-go="home" aria-label="Zur Startseite">B&amp;B<small id="areaName">Lager</small></button>
   <nav class="tabs" id="tabs">
     <button data-go="bestand">Bestand</button>
     <button data-go="belege">Belege</button>
@@ -694,7 +706,8 @@ function finishQueueItem(imp){
 }
 function openNextReady(){
   const next = QUEUE.find(q=>q.status==='ready'||q.status==='manual');
-  if(next){ IMP = next.imp; view='belege'; }
+  // Auf der Startseite und im Personal-Bereich nicht ungefragt in die Belege springen
+  if(next && areaOf(view)==='lager'){ IMP = next.imp; view='belege'; }
 }
 
 /* Beim Start und bei Rückkehr zur App: _Neu-Ordner prüfen und alles einlesen */
@@ -880,7 +893,7 @@ function vXl(){
 }
 
 /* ===================== Ansichten ===================== */
-let view = 'bestand';
+let view = 'home';   // Beim Öffnen immer die Startseite mit Lager / Personal
 let openArt = null, search='', onlyLow=false, mvFilter='', addingArt=false;
 let invCounts = {};
 
@@ -1177,8 +1190,40 @@ function vSetup(){
   </div>`;
 }
 
-const VIEWS = {bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
+/* Startseite und Bereiche: Lager (alles bisherige) und Personal (folgt) */
+const AREA_NAME = {home:'', lager:'Lager', personal:'Personal'};
+function areaOf(v){ return v==='home' ? 'home' : v==='personal' ? 'personal' : 'lager'; }
+function vHome(){
+  const open = QUEUE.filter(q=>q.status==='ready'||q.status==='manual').length;
+  return `<div class="stack">
+    <div><div class="eyebrow">${dDE(today())}</div><h1>Was möchtest du öffnen?</h1></div>
+    <div class="modules">
+      <button class="module" data-go="lager">
+        <b>Lager</b>
+        <span class="muted">Bestand, Belege, Buchungen und Inventur</span>
+        ${open ? `<span class="tag">${open} neue${open>1?'':'r'} Beleg${open>1?'e':''}</span>` : ''}
+      </button>
+      <button class="module" data-go="personal">
+        <b>Personal</b>
+        <span class="muted">Personalplanung für Events</span>
+        <span class="tag soon">In Planung</span>
+      </button>
+    </div>
+  </div>`;
+}
+function vPersonal(){
+  return `<div class="stack">
+    <div><div class="eyebrow">Personal</div><h1>Personalplanung</h1></div>
+    <div class="panel"><p style="margin:0">Dieser Bereich ist in Planung und kommt mit einem der nächsten Updates.</p></div>
+    <div class="row"><button class="btn" data-go="home">Zur Startseite</button></div>
+  </div>`;
+}
+
+const VIEWS = {home:vHome, personal:vPersonal, bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
 function render(){
+  const area = areaOf(view);
+  document.body.dataset.area = area;
+  $('#areaName').textContent = AREA_NAME[area];
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===view?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
@@ -1196,7 +1241,10 @@ function arm(el){ if(el.dataset.armed) return true; el.dataset.armed='1'; el.dat
 
 document.addEventListener('click', async e=>{
   const go = e.target.closest('[data-go]');
-  if(go){ e.preventDefault(); view=go.dataset.go; render(); window.scrollTo(0,0); if(view==='belege' && inboxCache.in===null) scanInbox(false); return; }
+  if(go){ e.preventDefault(); view=go.dataset.go;
+    // Lager öffnen: liegen neue Belege bereit, gleich den ersten zeigen, sonst den Bestand
+    if(view==='lager'){ view='bestand'; if(!IMP) openNextReady(); }
+    render(); window.scrollTo(0,0); if(view==='belege' && inboxCache.in===null) scanInbox(false); return; }
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act, id = el.dataset.id;
   if(el.dataset.confirm && !arm(el)) return;
