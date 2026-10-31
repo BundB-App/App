@@ -119,8 +119,8 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:9px 12px;border-radius:6px;font-size:14px}
 /* Startseite: Auswahl der Bereiche */
-body[data-area="home"] nav.tabs, body[data-area="home"] .fab, body[data-area="personal"] nav.tabs, body[data-area="personal"] .fab{display:none}
-body[data-area="home"] main, body[data-area="personal"] main{padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}
+body[data-area="home"] nav.tabs, body[data-area="personal"] nav.tabs, body[data-area="personal"] .fab-lager{display:none}
+body[data-area="home"] main, body[data-area="personal"] main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 body[data-area="home"] .sync, body[data-area="personal"] .sync{margin-left:auto}
 .brand{background:none;border:0;padding:0;color:inherit;cursor:pointer;text-align:left}
 .modules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
@@ -138,7 +138,13 @@ ol.steps{padding-left:20px;margin:0;display:grid;gap:6px}
 code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:9px;font-weight:500;z-index:20;max-width:calc(100% - 32px)}
 
-.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:12;display:inline-flex;align-items:center;gap:8px;
+/* Schnellbuchungs-Leiste: links Platz für Personal, rechts Lager (wie bisher) */
+.fabs{position:fixed;left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:12;
+  display:flex;justify-content:space-between;align-items:flex-end;gap:12px;pointer-events:none}
+.fab-lager{margin-left:auto}
+.fab small{display:none;font:600 10px/1 var(--f-body);letter-spacing:.1em;text-transform:uppercase;opacity:.8}
+body[data-area="home"] .fab small{display:inline}
+.fab{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;
   background:var(--accent);color:var(--accent-ink);border:0;border-radius:99px;padding:13px 18px;font:600 15px var(--f-body);cursor:pointer;box-shadow:0 6px 18px rgb(0 0 0 / .22)}
 .fab b{font:700 22px/1 var(--f-display)}
 .qb-back{position:fixed;inset:0;z-index:30;background:rgb(10 16 20 / .45);display:flex;align-items:center;justify-content:center;padding:16px}
@@ -160,7 +166,9 @@ code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radiu
 .seg.big button[data-qdir="1"][aria-pressed="true"]{color:var(--good)}
 .toast button{margin-left:12px;background:none;border:0;color:inherit;font:600 14px var(--f-body);text-decoration:underline;cursor:pointer}
 @media (max-width:760px){
-  .fab{bottom:calc(76px + env(safe-area-inset-bottom,0px));padding:12px 16px}
+  .fabs{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+  body[data-area="home"] .fabs, body[data-area="personal"] .fabs{bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  .fab{padding:12px 16px}
   .qb-back{align-items:flex-end;padding:0}
   .qb{border-radius:16px 16px 0 0;width:100%;max-height:92%;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
   .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
@@ -194,7 +202,10 @@ code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radiu
   <button class="sync" id="sync" data-act="sync" data-s="off"><i></i><span>Nicht verbunden</span></button>
 </div></header>
 <main class="wrap" id="view"></main>
-<button class="fab" id="fab" data-act="qbOpen" aria-label="Schnellbuchung"><b>±</b> Schnell buchen</button>
+<div class="fabs" id="fabs">
+  <!-- links kommt später die Schnellbuchung für Personal -->
+  <button class="fab fab-lager" id="fab" data-act="qbOpen" aria-label="Schnellbuchung Lager"><b>±</b> Schnell buchen <small>Lager</small></button>
+</div>
 <div id="qbRoot"></div>
 <div class="toast" id="toast" hidden></div>
 <input type="file" id="filepick" accept="application/pdf,image/*,.xml,.csv,text/csv,text/xml" hidden>
