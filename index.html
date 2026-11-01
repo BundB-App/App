@@ -1769,7 +1769,7 @@ function vPEvent(){
       ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId]; return `<div class="row spread tile-p" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
           <span class="small muted">${tSpan(a.planStart,a.planEnd)||'–'}${p&&p.phone?' · '+esc(p.phone):''}</span></span>
-          <button class="btn sm" data-act="pWa" data-id="${a.id}">WhatsApp</button></div>`; }).join('')
+          <button class="btn sm" data-act="pWa" data-id="${a.id}" title="${p&&p.phone?'Chat mit '+esc(p.phone)+' öffnen':'Keine Nummer hinterlegt: Teilen-Menü'}">${p&&p.phone?'WhatsApp':'Teilen …'}</button></div>`; }).join('')
           : '<div class="small muted">Noch niemand bestätigt.</div>'}</div>` : ''}</section>`
       : `<div class="panel small muted">Für ${multi?'diesen Tag':'dieses Event'} ist noch kein Bedarf eingetragen. Unter „Bearbeiten“ festlegen, wie viele Personen pro Kategorie gebraucht werden.</div>`}
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten.</div>` : ''}
@@ -1810,7 +1810,8 @@ function vPPersonen(){
   </div>`;
 }
 
-/* WhatsApp-Terminbestätigung: Teilen-Menü, sonst wa.me mit Nummer, sonst Text kopieren */
+/* WhatsApp-Terminbestätigung: mit hinterlegter Nummer direkt in den Chat dieser Person
+   (iPhone: WhatsApp-App über whatsapp://, Rechner: wa.me), sonst Teilen-Menü, sonst Text kopieren */
 function waText(a){
   const ev = PS.events[a.eventId], p = PS.persons[a.personId], day = dayOf(ev, a);
   const first = String(p ? p.name : '').trim().split(/\s+/)[0];
@@ -1822,10 +1823,13 @@ function waPhone(s){
   return d.replace(/\D/g,'');
 }
 async function waShare(a){
-  const text = waText(a);
+  const text = waText(a), tel = waPhone(PS.persons[a.personId]?.phone);
+  if(tel){
+    if(TOUCH) location.href = 'whatsapp://send?phone='+tel+'&text='+encodeURIComponent(text);
+    else window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(text), '_blank', 'noopener');
+    return;
+  }
   if(navigator.share){ try{ await navigator.share({text}); return; }catch(e){ if(e.name==='AbortError') return; } }
-  const tel = waPhone(PS.persons[a.personId]?.phone);
-  if(tel){ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(text), '_blank', 'noopener'); return; }
   if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>toast('Text kopiert, jetzt in WhatsApp einfügen'), ()=>toast(text));
   else toast(text);
 }
