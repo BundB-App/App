@@ -1946,16 +1946,25 @@ function dayAxis(ev, day){
   const as = asgOfDay(ev, day).filter(a=>a.status==='bestaetigt');
   const need0 = rolesOfDay(ev, day).map(r=>mins(roleTime(day,r.id).start)).filter(x=>x!=null), asg0 = as.map(a=>mins(a.planStart)).filter(x=>x!=null);
   const base = need0.length ? Math.min(...need0) : asg0.length ? Math.min(...asg0) : 0;
-  const rel = t => { const m = ((mins(t)-base)%1440+1440)%1440; return m>18*60 ? m-1440 : m; };
-  const span = (s,e) => { if(!s || !e) return null; const a=rel(s); return [a, a+(dur(s,e)||0)]; };
+  // Eine Zeit kann am Tag selbst oder (nach Mitternacht) am Folgetag liegen. Gewählt wird die Lage, die am besten
+  // zur Bedarfszeit (ref) passt; ohne ref die näher am Tagesbeginn. Bedarfszeiten selbst beginnen nie vor base.
+  const span = (s,e,ref) => { if(!s || !e) return null;
+    const d = dur(s,e)||0, a0 = ((mins(s)-base)%1440+1440)%1440;
+    if(!ref) return [a0, a0+d];
+    const ov = c => Math.max(0, Math.min(c+d, ref[1]) - Math.max(c, ref[0]));
+    const c = [a0, a0-1440].sort((x,y)=>ov(y)-ov(x) || Math.abs(x-ref[0])-Math.abs(y-ref[0]))[0];
+    return [c, c+d]; };
   const clock = m => { const x=((base+m)%1440+1440)%1440; return `${String(Math.floor(x/60)).padStart(2,'0')}:${String(x%60).padStart(2,'0')}`; };
-  return {as, span, clock};
+  // Gesamtfenster des Tages (alle Bedarfszeiten) als Bezug für Kategorien ohne eigene Zeit
+  const wins = rolesOfDay(ev, day).map(r=>{ const t=roleTime(day,r.id); return span(t.start,t.end); }).filter(Boolean);
+  const dayWin = wins.length ? [Math.min(...wins.map(x=>x[0])), Math.max(...wins.map(x=>x[1]))] : null;
+  return {as, span, clock, dayWin};
 }
 /* Abdeckung einer Kategorie über die Bedarfszeit (bestätigte Personen mit Planzeit):
    Abschnitte mit Anzahl; state = bad (irgendwann zu wenige), over (irgendwann zu viele, auch kurz), ok (durchgehend genau) */
 function roleCoverage(ev, day, r, ax=dayAxis(ev, day)){
   const n = Number((day.need||{})[r])||0, t = roleTime(day,r), w = ax.span(t.start,t.end);
-  const mine = ax.as.filter(a=>a.role===r), ppl = mine.map(a=>({a, x:ax.span(a.planStart,a.planEnd)})).filter(o=>o.x);
+  const mine = ax.as.filter(a=>a.role===r), ppl = mine.map(a=>({a, x:ax.span(a.planStart,a.planEnd, w || ax.dayWin)})).filter(o=>o.x);
   const pts = new Set(); if(w){ pts.add(w[0]); pts.add(w[1]); } ppl.forEach(o=>{ pts.add(o.x[0]); pts.add(o.x[1]); });
   const ps = [...pts].sort((x,y)=>x-y), segs = [];
   for(let i=0;i<ps.length-1;i++){
