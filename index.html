@@ -463,7 +463,7 @@ const BASE_DEFAULT='/Apps/BundB App', BASE_KNOWN=['/Apps/BundB App','/BundB App'
 /* App key der Dropbox-App „B&B Lager“. Nicht geheim (PKCE, kein App secret); identifiziert nur das Programm.
    Jede Person meldet sich beim Verbinden mit ihrem eigenen Dropbox-Konto an. */
 const APP_KEY='93rr96fr7l814zc';
-let CFG = Object.assign({appKey:'', base:BASE_DEFAULT, ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
+let CFG = Object.assign({appKey:'', base:BASE_DEFAULT, ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', authUrl:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
 if(!CFG.appKey) CFG.appKey = APP_KEY;
 
 /* Personal: eigene Datei personal.json mit eigenem Zustand PS. Nicht in lager.json, denn ältere Geräte
@@ -509,18 +509,26 @@ function b64url(buf){ let s=''; new Uint8Array(buf).forEach(b=>s+=String.fromCha
 const DBX = {
   get connected(){ return !!(CFG.appKey && CFG.refresh); },
   async startAuth(){
+    // Offenen Versuch weiterverwenden: iOS lädt die App beim Wechsel zu Dropbox oft neu, ein neuer Schlüssel passt dann nicht mehr zum kopierten Code
+    if(CFG.verifier && CFG.authUrl && CFG.authUrl.includes('client_id='+encodeURIComponent(CFG.appKey)+'&')) return CFG.authUrl;
     CFG.verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
     let method='plain', challenge=CFG.verifier;
     if(crypto.subtle){ try{ challenge=b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(CFG.verifier))); method='S256'; }catch(e){} }
-    saveCfg();
-    return `https://www.dropbox.com/oauth2/authorize?client_id=${encodeURIComponent(CFG.appKey)}&response_type=code&token_access_type=offline&code_challenge=${challenge}&code_challenge_method=${method}`;
+    CFG.authUrl = `https://www.dropbox.com/oauth2/authorize?client_id=${encodeURIComponent(CFG.appKey)}&response_type=code&token_access_type=offline&code_challenge=${challenge}&code_challenge_method=${method}`;
+    saveCfg(); return CFG.authUrl;
   },
   async finishAuth(code){
     const r = await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({code:code.trim(),grant_type:'authorization_code',code_verifier:CFG.verifier,client_id:CFG.appKey})});
     const j = await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(j.error_description||j.error||'Anmeldung fehlgeschlagen');
-    CFG.refresh=j.refresh_token; CFG.access=j.access_token; CFG.accessExp=now()+j.expires_in*1000; CFG.verifier=''; saveCfg();
+    if(!r.ok){
+      const msg = j.error_description||j.error||'';
+      if(/verifier/i.test(msg)){ CFG.verifier=''; CFG.authUrl=''; saveCfg();
+        throw new Error('Der Code gehört zu einem älteren Verbindungsversuch. Bitte „Verbinden“ tippen, die Freigabe neu öffnen und den neuen Code einfügen.'); }
+      if(/code/i.test(msg)) throw new Error('Code abgelaufen oder schon benutzt. Bitte „Dropbox-Freigabe öffnen“ erneut tippen und den neuen Code einfügen.');
+      throw new Error(msg||'Anmeldung fehlgeschlagen');
+    }
+    CFG.refresh=j.refresh_token; CFG.access=j.access_token; CFG.accessExp=now()+j.expires_in*1000; CFG.verifier=''; CFG.authUrl=''; saveCfg();
   },
   async token(){
     if(CFG.access && now()<CFG.accessExp-60000) return CFG.access;
@@ -1244,10 +1252,10 @@ function vSetup(){
             <label class="f">Ordner in der Dropbox<input id="cfg-base" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
             <label class="f">App key<input id="cfg-key" value="${esc(CFG.appKey)}" autocomplete="off" spellcheck="false" placeholder="${esc(APP_KEY)}"></label>
           </div></details>
-        <div id="authStep" hidden class="stack">
-          <a class="btn" id="authLink" href="#" target="_blank" rel="noopener">Dropbox-Freigabe öffnen ↗</a>
+        <div id="authStep" ${CFG.authUrl?'':'hidden'} class="stack">
+          <a class="btn" id="authLink" href="${esc(CFG.authUrl||'#')}" target="_blank" rel="noopener">Dropbox-Freigabe öffnen ↗</a>
           <div class="row"><input id="authCode" placeholder="Code aus Dropbox einfügen" style="flex:1 1 220px" autocomplete="off"><button class="btn primary" data-act="authCode">Code bestätigen</button></div>
-          <p class="small muted" style="margin:0">Der Code gilt nur wenige Minuten und nur einmal. Bei einer Fehlermeldung einfach erneut auf „Verbinden“ tippen.</p>
+          <p class="small muted" style="margin:0">Der Code gilt nur wenige Minuten und nur einmal. Nach dem Kopieren hierher zurückwechseln und einfügen, nicht noch einmal „Verbinden“ tippen.</p>
         </div>`}
     </div>
     <div class="panel stack"><h2>App weitergeben</h2>
@@ -1806,7 +1814,7 @@ document.addEventListener('click', async e=>{
       const code=$('#authCode').value; if(!code.trim()) return;
       try{ await DBX.finishAuth(code); toast('Dropbox verbunden'); render(); await sync(); scanInbox(true); }
       catch(err){ toast(err.message); } break; }
-    case 'disconnect': CFG.refresh=''; CFG.access=''; saveCfg(); setSync('off'); render(); break;
+    case 'disconnect': CFG.refresh=''; CFG.access=''; CFG.verifier=''; CFG.authUrl=''; saveCfg(); setSync('off'); render(); break;
     case 'delRule': del('rules',id); persist(); render(); break;
     case 'export': {
       const blob = new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
