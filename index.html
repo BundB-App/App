@@ -155,6 +155,7 @@ button.stat.need b{font:700 24px/1.1 var(--f-display)}
 button.stat.need[aria-expanded="true"]{border-color:var(--accent);background:var(--accent-soft)}
 button.stat.need:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tile-more{position:absolute;right:10px;top:8px;color:var(--muted);font-size:12px}
+button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
 .tile-p{padding-top:10px;border-top:1px solid var(--line)}
 .ist{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 64px;gap:8px;align-items:end}
 .ist .res{text-align:right}
@@ -1482,6 +1483,7 @@ function pNav(active){
 /* Formular: Zeitraum von–bis, darunter pro Tag Zeiten und Bedarf. Leere Felder statt 0, damit man direkt tippen kann. */
 /* Kategorien im Formular: Zeilen mit Namen, Vorschläge zum Antippen, eigene hinzufügen */
 let peRoles = null;
+let peMain = {start:'', end:''};   // Hauptzeit des Events, Vorschlag für jede Kategorie
 function peCatsHtml(){
   const used = peRoles.map(r=>r.id);
   return `${peRoles.length ? peRoles.map(r=>`<div class="pcat"><input class="pc-name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Kategorie" placeholder="Name der Kategorie">
@@ -1503,7 +1505,7 @@ function peDaysHtml(days){
       <div class="prole prole-h"><span></span><span>Anzahl</span><span>Beginn</span><span>Ende</span></div>
       ${peRoles.map(({id:r,name:l})=>{ const t=(d.times||{})[r]||{}, n=Number((d.need||{})[r])||'';
         // ältere Tage ohne Rollenzeiten: Tageszeit vorschlagen
-        const st=t.start||t.end ? t : (d.start||d.end) && n ? {start:d.start,end:d.end} : {};
+        const st=t.start||t.end ? t : (d.start||d.end) && n ? {start:d.start,end:d.end} : peMain;
         return `<div class="prole" data-r="${r}"><span class="prole-n">${esc(l||'…')}</span>
           <input type="number" min="0" inputmode="numeric" class="pd-need" aria-label="${l} Anzahl" value="${n}" placeholder="–">
           <input type="time" class="pd-start" aria-label="${l} Beginn" value="${esc(st.start||'')}">
@@ -1534,7 +1536,7 @@ function peRebuild(changed){
   $('#pe-days').innerHTML = peDaysHtml(days);
 }
 function eventFormHtml(ev){
-  if(!peRoles) peRoles = ev.id ? rolesOf(ev).map(r=>({...r})) : [];
+  if(!peRoles){ peRoles = ev.id ? rolesOf(ev).map(r=>({...r})) : []; peMain = {start:ev.mainStart??ev.start??'', end:ev.mainEnd??ev.end??''}; }
   const days = ev.id ? daysOf(ev) : [];
   const from = days.length ? days[0].date : '', to = days.length>1 ? days[days.length-1].date : '';
   return `<form class="panel stack" id="pEventForm" data-id="${ev.id||''}">
@@ -1544,6 +1546,10 @@ function eventFormHtml(ev){
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="f">Von<input id="pe-from" type="date" required value="${esc(from)}" data-prev="${esc(from)}"></label>
       <label class="f">Bis (bei mehreren Tagen)<input id="pe-to" type="date" value="${esc(to)}"></label></div>
+    <div><div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="f">Hauptzeit Beginn<input id="pe-mstart" type="time" value="${esc(peMain.start)}"></label>
+      <label class="f">Hauptzeit Ende<input id="pe-mend" type="time" value="${esc(peMain.end)}"></label></div>
+      <div class="small muted" style="margin-top:4px">Gilt erst einmal für alle Kategorien und Tage, unten einzeln anpassbar.</div></div>
     <div id="pe-days" class="stack" style="gap:10px">${peDaysHtml(days)}</div>
     <div class="row"><button class="btn primary" type="submit">${ev.id?'Speichern':'Anlegen'}</button>
       <button class="btn" type="button" data-act="${ev.id?'pEditEvent':'pCancelEvent'}">Abbrechen</button>
@@ -1576,7 +1582,7 @@ function savePEvent(id){
     if(nd && !a.shiftId){ const o=roleTime(od,a.role), n=roleTime(nd,a.role);
       if(a.planStart===o.start && a.planEnd===o.end && (n.start!==o.start || n.end!==o.end)){ a.planStart=n.start; a.planEnd=n.end; put('assignments',a); } }
   });
-  Object.assign(ev, {name, roles, days, date:days[0].date, dateEnd:days[days.length-1].date, start:days[0].start, end:days[0].end});
+  Object.assign(ev, {name, roles, mainStart:peMain.start, mainEnd:peMain.end, days, date:days[0].date, dateEnd:days[days.length-1].date, start:days[0].start, end:days[0].end});
   delete ev.need;
   put('events',ev);
   persist(); pAddEvent=false; pEditEvent=false; peRoles=null; pEventId=ev.id; pDayId=null; view='pEvent'; render(); window.scrollTo(0,0); toast(id?'Event gespeichert':'Event angelegt');
@@ -1650,7 +1656,7 @@ function vPEvent(){
   const multi = days.length>1, di = days.indexOf(day);
   const as = asgOfDay(ev, day), need = day.need||{}, d = dur(day.start, day.end);
   const order = {bestaetigt:0, angefragt:1, abgesagt:2};
-  const roles = rolesOf(ev).map(x=>x.id).filter(r=>(Number(need[r])||0)>0 || as.some(a=>a.role===r));
+  const roles = rolesOf(ev).map(x=>x.id).filter(r=>ev.roles || (Number(need[r])||0)>0 || as.some(a=>a.role===r));
   const s = dayState(ev, day);
   const shifts = ev.shifts||[];
   const dayLine = `${dWD(day.date)}${day.start?' · '+tSpan(day.start,day.end)+' Uhr':''}${d!=null&&day.end?' · '+hm(d)+' Std.':''}`;
@@ -1670,8 +1676,8 @@ function vPEvent(){
     ${multi ? `<div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div>
       <div><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dayLine}</h2></div>` : ''}
     ${roles.length ? `<div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
-        const cls = c+q<n ? 'bad' : q ? 'warn' : 'ok';
-        return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span><span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
+        const cls = !n ? (q ? 'warn' : '') : c+q<n ? 'bad' : q ? 'warn' : 'ok';
+        return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span><span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
       ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId]; return `<div class="row spread tile-p" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
           <span class="small muted">${tSpan(a.planStart,a.planEnd)||'–'}${p&&p.phone?' · '+esc(p.phone):''}</span></span>
@@ -1827,7 +1833,7 @@ function pqCreateEv(){
   if(!n.name.trim() || !n.from){ toast('Bitte Name und Datum angeben.'); return; }
   if(n.to && n.to<n.from){ toast('„Bis“ liegt vor „Von“, bitte prüfen.'); return; }
   const days = dateRange(n.from, n.to).map(date=>({id:uid(), date, label:'', start:n.start, end:n.end, need:{}, times:{}}));
-  const ev = put('events',{id:uid(), name:n.name.trim(), days, date:days[0].date, dateEnd:days[days.length-1].date, start:n.start, end:n.end});
+  const ev = put('events',{id:uid(), name:n.name.trim(), mainStart:n.start, mainEnd:n.end, days, date:days[0].date, dateEnd:days[days.length-1].date, start:n.start, end:n.end});
   persist();
   pq.newEv=null; pq.eventId=ev.id; pq.dayId=days[0].id; pqTimes(); renderPQ(); render(); $('#pq-q')?.focus();
   toast('Event angelegt. Bedarf pro Rolle im Event unter „Bearbeiten“.');
@@ -2055,6 +2061,11 @@ document.addEventListener('change', e=>{
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
   if(t.id==='cfg-auto'){ CFG.autoBook=t.checked; saveCfg(); return; }
   if(t.id==='pe-from' || t.id==='pe-to'){ peRebuild(t.id); return; }
+  if(t.id==='pe-mstart' || t.id==='pe-mend'){
+    // Neue Hauptzeit in alle Felder, die leer sind oder noch auf der alten Hauptzeit stehen
+    const k = t.id==='pe-mstart' ? 'start' : 'end', old = peMain[k];
+    document.querySelectorAll(`#pe-days .pd-${k}`).forEach(i=>{ if(!i.value || i.value===old) i.value=t.value; });
+    peMain[k] = t.value; return; }
   if(t.dataset.pa){ const a=PS.assignments[t.dataset.id], k=t.dataset.pa; a[k]=t.value;
     if(k==='shiftId' || (k==='dayId' && !a.shiftId)){ const ev=PS.events[a.eventId]; const sh=(ev.shifts||[]).find(x=>x.id===a.shiftId)||dayOf(ev,a); a.planStart=sh.start||''; a.planEnd=sh.end||''; }
     if(k==='dayId') pDayId=t.value;

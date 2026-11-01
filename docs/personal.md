@@ -40,6 +40,8 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Ältere Events ohne `days` gelten als ein Tag mit der id des Events; Einsätze ohne `dayId` gehören zum ersten Tag.
 - Pro Tag und Rolle eigene Anzahl und Zeiten; die Einplanen-Zeile jeder Rolle zeigt diese Zeiten, die Planzeit wird daraus vorausgefüllt.
 - Kategorien (früher feste Rollen) legt jedes Event selbst fest, frei benennbar; die vier Rollen sind Vorschläge. need/times/assignment.role verweisen auf die Kategorie-id. Ältere Events ohne `roles` haben die vier Vorschläge.
+- Hauptzeit pro Event (`mainStart`/`mainEnd`): wird im Formular für alle Kategorien und Tage vorausgefüllt; Änderungen ziehen in Felder nach, die leer sind oder noch auf der alten Hauptzeit stehen.
+- Im Event erscheint jede Kategorie als Kachel, auch ohne Anzahl (dann „0/–“).
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
