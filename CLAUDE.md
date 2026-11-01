@@ -35,7 +35,7 @@ Kein Build-Schritt, kein Framework. Alles liegt im Repository-Root und wird so a
 4. **Beleg einlesen** – `readDocument` (PDF via pdf.js inkl. eingebetteter ZUGFeRD-XML, Foto/Scan via Tesseract, XML, CSV), Regeln/Vorschläge, Posteingang-Warteschlange (`scanInbox`, `runQueue`), `bookImport`.
 5. **Schnellbuchung** – Bottom-Sheet für Bruch/Schwund/Rückgabe usw., mit Rückgängig.
 6. **Bestand aus Excel/CSV** – Import unter Inventur (SheetJS), setzt Bestand per Inventurbuchung.
-7. **Ansichten** – `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`; `render()` schreibt `#view` komplett neu.
+7. **Ansichten** – `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`, `vPersonal`; `render()` schreibt `#view` komplett neu.
 8. **Ereignisse** – zentrale Delegation über `data-act` / `data-go` / `data-li` usw.
 
 Externe Bibliotheken (versionsgenau gepinnt, per `loadScript` erst bei Bedarf geladen):
@@ -59,12 +59,13 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - **Merge** pro Datensatz: neueres `updatedAt` gewinnt. Mehrere Geräte/Mitarbeiter können offline buchen.
 - **Neustart** (Einstellungen): setzt `meta.resetAt`; beim Sync werden auf beiden Seiten alle Datensätze mit `updatedAt <= resetAt` verworfen.
 - Schutz: Fehlt `lager.json` nach einem früheren Sync, wird **nicht** neu angelegt (Ordner umbenannt?), außer `CFG.allowNew`.
-- Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey`, `base` (Standard `/BundB App`), `ownName`, Tokens, `autoBook`.
+- Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey`, `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.
 - Datenformat-Änderungen müssen abwärtskompatibel sein (ältere Geräte syncen weiter mit). Neue Sammlungen in `COLLS` aufnehmen.
 
 ## Dropbox
 
-- Ordner `/BundB App` (Thomas' Mac: `~/Library/CloudStorage/Dropbox/BundB App`), wird mit Mitarbeitern geteilt.
+- Ordner `/Apps/BundB App` (Thomas' Mac: `~/Library/CloudStorage/Dropbox/Apps/BundB App`, seit 2026-11-01; vorher `/BundB App`), wird mit Mitarbeitern geteilt. Bei Mitarbeitern liegt der geteilte Ordner meist als `/BundB App` – beides wird gefunden.
+- `Dropbox/Apps/` sammelt alle eigenen Apps (z. B. auch `Time Tracker`).
   - `lager.json` – Datenbank, nie von Hand ändern
   - `Eingang/_Neu`, `Ausgang/_Neu` – Posteingang; die App liest dort beim Start und bei Rückkehr in den Vordergrund automatisch ein
   - `Eingang/<Jahr>`, `Ausgang/<Jahr>` – Archiv nach dem Buchen (nur Ablage, für den Bestand nicht nötig)
@@ -78,7 +79,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 1. Änderung auf einem Branch machen, testen (unten).
 2. **In `sw.js` `APP_CACHE` hochzählen** (`bb-lager-app-vN`) – sonst bekommen installierte Geräte das Update nicht zuverlässig.
 3. **Sofort live, ohne Rückfrage** (Wunsch von Thomas): nach dem Test nach `main` mergen/pushen. Geräte holen das Update beim nächsten Öffnen mit Netz.
-4. Direkt danach die App-Dateien (`index.html`, `sw.js`, `manifest.webmanifest`, `icon-*.png`) nach `~/Library/CloudStorage/Dropbox/BundB App/App/` kopieren und mit `cmp` prüfen (keine `tests/`, `testdaten/`, `CLAUDE.md`).
+4. Direkt danach die App-Dateien (`index.html`, `sw.js`, `manifest.webmanifest`, `icon-*.png`) nach `~/Library/CloudStorage/Dropbox/Apps/BundB App/App/` kopieren und mit `cmp` prüfen (keine `tests/`, `testdaten/`, `CLAUDE.md`).
 5. Thomas kurz sagen, was neu ist und ob er etwas tun muss.
 
 ## Tests
