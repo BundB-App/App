@@ -166,9 +166,10 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .chk input{width:18px;height:18px}
 .module .tag.warn{background:var(--warn-soft);color:var(--warn)}
 /* Startseite: Auswahl der Bereiche */
-body[data-area="home"] nav.tabs, body[data-area="personal"] nav.tabs, body[data-area="personal"] .fab-lager{display:none}
-body[data-area="home"] main, body[data-area="personal"] main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
-body[data-area="home"] .sync, body[data-area="personal"] .sync{margin-left:auto}
+/* Jeder Bereich hat sein Hauptmenü: #tabs im Lager, #ptabs im Personal, auf der Startseite keins */
+body[data-area="home"] nav.tabs, body[data-area="personal"] #tabs, body:not([data-area="personal"]) #ptabs, body[data-area="personal"] .fab-lager{display:none}
+body[data-area="home"] main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+body[data-area="home"] .sync{margin-left:auto}
 .brand{background:none;border:0;padding:0;color:inherit;cursor:pointer;text-align:left}
 .modules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .module{display:grid;gap:10px;align-content:start;text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:22px 20px;cursor:pointer;font:inherit;min-height:170px}
@@ -221,7 +222,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .toast button{margin-left:12px;background:none;border:0;color:inherit;font:600 14px var(--f-body);text-decoration:underline;cursor:pointer}
 @media (max-width:760px){
   .fabs{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
-  body[data-area="home"] .fabs, body[data-area="personal"] .fabs{bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  body[data-area="home"] .fabs{bottom:calc(20px + env(safe-area-inset-bottom,0px))}
   .fab{padding:12px 16px}
   .qb-back{align-items:flex-end;padding:0}
   .qb{border-radius:16px 16px 0 0;width:100%;max-height:92%;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
@@ -251,6 +252,11 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
     <button data-go="belege">Belege</button>
     <button data-go="buchungen">Buchungen</button>
     <button data-go="inventur">Inventur</button>
+    <button data-go="setup">Einstellungen</button>
+  </nav>
+  <nav class="tabs" id="ptabs">
+    <button data-go="personal">Events</button>
+    <button data-go="pPersonen">Personen</button>
     <button data-go="setup">Einstellungen</button>
   </nav>
   <button class="sync" id="sync" data-act="sync" data-s="off"><i></i><span>Nicht verbunden</span></button>
@@ -1475,11 +1481,6 @@ function conflicts(personId, date, eventId){
 }
 const conflictTxt = list => list.map(c=>`${esc(c.ev.name)} (${tSpan(c.a.planStart,c.a.planEnd)||'ganztags'})`).join(', ');
 
-function pNav(active){
-  return `<div class="seg" role="group" aria-label="Personal">
-    <button data-go="personal" aria-pressed="${active==='events'}">Events</button>
-    <button data-go="pPersonen" aria-pressed="${active==='persons'}">Personen</button></div>`;
-}
 /* Formular: Zeitraum von–bis, darunter pro Tag Zeiten und Bedarf. Leere Felder statt 0, damit man direkt tippen kann. */
 /* Kategorien im Formular: Zeilen mit Namen, Vorschläge zum Antippen, eigene hinzufügen */
 let peRoles = null;
@@ -1604,7 +1605,6 @@ function vPersonal(){
   return `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Personal</div><h1>Events</h1></div>
       <button class="btn primary" data-act="pAddEvent">+ Event</button></div>
-    ${pNav('events')}
     ${pAddEvent ? eventFormHtml({}) : ''}
     ${up.length ? `<div class="list">${up.map(e=>row(e,false)).join('')}</div>`
       : `<div class="panel empty">Keine anstehenden Events. Mit „+ Event“ oder unten über „Schnell buchen“ anlegen.</div>`}
@@ -1711,7 +1711,6 @@ function vPPersonen(){
   return `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Personal</div><h1>Personen</h1></div>
       <button class="btn primary" data-act="pAddPerson">+ Person</button></div>
-    ${pNav('persons')}
     ${pEditPerson==='new' ? form({}) : ''}
     ${ps.length ? `<div class="list">${ps.map(p=>{
       if(pEditPerson===p.id) return `<div class="item" style="padding:10px">${form(p)}</div>`;
@@ -1851,7 +1850,9 @@ function pqBook(){
 /* Startseite und Bereiche: Lager (alles bisherige) und Personal */
 const AREA_NAME = {home:'', lager:'Lager', personal:'Personal'};
 const P_VIEWS = ['personal','pEvent','pPersonen'];
-function areaOf(v){ return v==='home' ? 'home' : P_VIEWS.includes(v) ? 'personal' : 'lager'; }
+/* Einstellungen und Anleitung gehören zu dem Bereich, aus dem man kommt */
+let curArea = 'home';
+function areaOf(v){ return v==='home' ? 'home' : P_VIEWS.includes(v) ? 'personal' : (v==='setup'||v==='anleitung') && curArea==='personal' ? 'personal' : 'lager'; }
 function vHome(){
   const open = QUEUE.filter(q=>q.status==='ready'||q.status==='manual').length;
   const up = live('events').filter(e=>evTo(e)>=today()), red = up.filter(e=>evState(e).open).length;
@@ -1873,11 +1874,11 @@ function vHome(){
 }
 const VIEWS = {home:vHome, personal:vPersonal, pEvent:vPEvent, pPersonen:vPPersonen, anleitung:vAnleitung, bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
 function render(){
-  const area = areaOf(view);
+  const area = curArea = areaOf(view);
   document.body.dataset.area = area;
   $('#areaName').textContent = AREA_NAME[area];
-  const tab = view==='anleitung' ? 'setup' : view;
-  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
+  const tab = view==='anleitung' ? 'setup' : view==='pEvent' ? 'personal' : view;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
   if(view==='belege' && !IMP && !busyMsg) bindDrop();

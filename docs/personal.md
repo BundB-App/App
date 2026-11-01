@@ -42,6 +42,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Kategorien (früher feste Rollen) legt jedes Event selbst fest, frei benennbar; die vier Rollen sind Vorschläge. need/times/assignment.role verweisen auf die Kategorie-id. Ältere Events ohne `roles` haben die vier Vorschläge.
 - Hauptzeit pro Event (`mainStart`/`mainEnd`): wird im Formular für alle Kategorien und Tage vorausgefüllt; Änderungen ziehen in Felder nach, die leer sind oder noch auf der alten Hauptzeit stehen.
 - Im Event erscheint jede Kategorie als Kachel, auch ohne Anzahl (dann „0/–“).
+- Hauptmenü im Bereich Personal (`#ptabs`): Events, Personen, Einstellungen. Einstellungen/Anleitung bleiben im Bereich, aus dem man kommt (`curArea`).
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
