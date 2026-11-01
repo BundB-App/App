@@ -45,6 +45,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Hauptmenü im Bereich Personal (`#ptabs`): Events, Personen, Einstellungen. Einstellungen/Anleitung bleiben im Bereich, aus dem man kommt (`curArea`).
 - Uhrzeiten am iPhone (Touch): Textfeld mit Zifferntastatur statt Drehrad, „1430“ → „14:30“, springt ins nächste Zeitfeld (`normTime`, `touchTimes`). Am Rechner bleibt `type=time`.
 - Event-Seite: Kacheln im farbigen Block „Übersicht“, darunter abgesetzt „Einplanen“.
+- „Schnell buchen“ nur auf der Startseite. Im Event-Formular schwebt die Leiste Speichern/Abbrechen unten mit (`.save-bar`, sticky); „Event löschen“ steht am Formularende.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
