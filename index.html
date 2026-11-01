@@ -1835,9 +1835,9 @@ function vPEvent(){
         <input type="time" aria-label="Beginn" data-shift="start" data-id="${sh.id}" value="${esc(sh.start||'')}"><input type="time" aria-label="Ende" data-shift="end" data-id="${sh.id}" value="${esc(sh.end||'')}">
         <button class="btn sm danger" data-act="pDelShift" data-id="${sh.id}" aria-label="Schicht löschen">×</button></div>`).join('')
         : '<div class="small muted">Ohne Schichten gilt die Zeit der jeweiligen Kategorie.</div>'}</div>` : ''}
-    ${multi ? `<div class="row day-row"><div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div>
-        <button class="btn tl-btn" data-act="pTimeline" aria-label="Zeitstrahl öffnen">${TL_ICON}<span>Zeitstrahl</span></button></div>
-      <div><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dayLine}</h2></div>` : ''}
+    ${multi ? `<div class="row day-row"><div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div></div>
+      <div class="row spread" style="flex-wrap:nowrap"><div style="min-width:0"><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dWD(day.date)}</h2></div>
+        <button class="btn tl-btn" data-act="pTimeline" aria-label="Zeitstrahl öffnen">${TL_ICON}<span>Zeitstrahl</span></button></div>` : ''}
     ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span>${multi?'<span class="small muted">Kachel antippen: Bestätigte</span>':`<button class="btn sm tl-btn" data-act="pTimeline">${TL_ICON}<span>Zeitstrahl</span></button>`}</div>
       <div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
         const cls = roleCoverage(ev, day, r).state;   // rot zu wenige, blau überbelegt (auch kurz), grün genau
