@@ -1777,6 +1777,11 @@ function vPersonal(){
 
 /* Abweichung Ist zu Plan, z. B. „+0:45“ */
 function istDiff(a){ const pd=dur(a.planStart,a.planEnd), ad=dur(a.actualStart,a.actualEnd); return ad!=null && pd!=null && a.actualStart && a.actualEnd ? ad-pd : null; }
+/* Geöffnete „Ändern“-Bereiche bleiben beim Neuzeichnen offen; Planzeiten werden ohne Neuzeichnen gespeichert
+   (das Zeitfeld am Rechner meldet schon beim ersten Ziffernblock eine Änderung), neu gezeichnet wird beim Zuklappen */
+const pOpenEdits = new Set(); let pEditDirty = false;
+document.addEventListener('toggle', e=>{ const d=e.target; if(!d.classList || !d.classList.contains('asg-edit')) return;
+  if(d.open) pOpenEdits.add(d.dataset.id); else { pOpenEdits.delete(d.dataset.id); if(pEditDirty){ pEditDirty=false; render(); } } }, true);
 function asgHtml(a, ev, day){
   const df = istDiff(a);
   const pd = dur(a.planStart, a.planEnd);
@@ -1785,12 +1790,12 @@ function asgHtml(a, ev, day){
   const sh = a.shiftId && shifts.find(s=>s.id===a.shiftId);
   return `<div class="asg ${a.status==='abgesagt'?'off':''}">
     <div class="row spread" style="flex-wrap:nowrap;align-items:flex-start"><div style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
-      <span class="small muted">Plan ${tSpan(a.planStart,a.planEnd)||'–'}${pd!=null?` (${hm(pd)} Std.)`:''}${sh?' · '+esc(sh.label||'Schicht'):''}${a.actualStart&&a.actualEnd?` · Ist ${tSpan(a.actualStart,a.actualEnd)}${df?' ('+hmSigned(df)+')':''}`:''}</span></div>
+      <span class="small muted"><span id="plan-${a.id}">Plan ${tSpan(a.planStart,a.planEnd)||'–'}${pd!=null?` (${hm(pd)} Std.)`:''}</span>${sh?' · '+esc(sh.label||'Schicht'):''}${a.actualStart&&a.actualEnd?` · Ist ${tSpan(a.actualStart,a.actualEnd)}${df?' ('+hmSigned(df)+')':''}`:''}</span></div>
       <select class="st-sel st-${a.status}" data-pa="status" data-id="${a.id}" aria-label="Status von ${esc(personName(a.personId))}">${Object.keys(STATUS).map(s=>
         `<option value="${s}" ${a.status===s?'selected':''}>${STATUS[s]}</option>`).join('')}</select></div>
     ${conf.length ? `<div class="note small">Am selben Tag schon eingeplant: ${conflictTxt(conf)}</div>` : ''}
     <div class="row" style="gap:6px">
-      <details class="small asg-edit"><summary class="btn sm">Ändern</summary>
+      <details class="small asg-edit" data-id="${a.id}" ${pOpenEdits.has(a.id)?'open':''}><summary class="btn sm">Ändern</summary>
         <div class="grid" style="margin-top:8px">
           ${days.length>1?`<label class="f">Tag<select data-pa="dayId" data-id="${a.id}">${days.map(d=>`<option value="${d.id}" ${day.id===d.id?'selected':''}>${dWD(d.date)}</option>`).join('')}</select></label>`:''}
           <label class="f">Kategorie<select data-pa="role" data-id="${a.id}">${rolesOf(ev).filter(x=>x.id===a.role || rolesOfDay(ev,day).includes(x)).map(({id:r,name:l})=>`<option value="${r}" ${a.role===r?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
@@ -2379,6 +2384,9 @@ document.addEventListener('change', e=>{
   if(t.dataset.pa==='actualStart' || t.dataset.pa==='actualEnd'){ const a=PS.assignments[t.dataset.id]; a[t.dataset.pa]=t.value; put('assignments',a); persist();
     const df=istDiff(a), el=$('#ist-d-'+a.id); if(el){ el.textContent=df!=null?hmSigned(df):''; el.className='res '+(df>0?'minus':df<0?'plus':''); }
     return; }
+  if(t.dataset.pa==='planStart' || t.dataset.pa==='planEnd'){ const a=PS.assignments[t.dataset.id]; a[t.dataset.pa]=t.value; put('assignments',a); persist();
+    const pd=dur(a.planStart,a.planEnd), el=$('#plan-'+a.id); if(el) el.textContent=`Plan ${tSpan(a.planStart,a.planEnd)||'–'}${pd!=null?` (${hm(pd)} Std.)`:''}`;
+    pEditDirty=true; return; }
   if(t.dataset.pa){ const a=PS.assignments[t.dataset.id], k=t.dataset.pa; a[k]=t.value;
     if(k==='shiftId' || (k==='dayId' && !a.shiftId)){ const ev=PS.events[a.eventId]; const sh=(ev.shifts||[]).find(x=>x.id===a.shiftId)||dayOf(ev,a); a.planStart=sh.start||''; a.planEnd=sh.end||''; }
     if(k==='dayId') pDayId=t.value;
