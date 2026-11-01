@@ -1242,24 +1242,26 @@ function vAnleitung(){
       <p class="muted" style="margin:6px 0 0">Einmalig ca. 5 Minuten pro Gerät. Danach startet B&amp;B wie eine normale App vom Home-Bildschirm.</p></div>
     <div class="panel stack" style="gap:8px"><h3>Das brauchst du</h3>
       <ul class="steps">
-        <li>Ein iPhone mit aktuellem iOS und <b>Safari</b>. Andere Browser können keine Apps zum Home-Bildschirm hinzufügen.</li>
+        <li>Ein iPhone mit aktuellem iOS (ab 16.4) und <b>Safari</b> oder <b>Chrome</b>. Bei älterem iOS geht es nur mit Safari.</li>
         <li>Ein <b>Dropbox-Konto</b>, in dem der Ordner <b>${folder}</b> liegt (eigener Ordner oder mit dir geteilt).</li>
         <li>Optional die ${ext('https://apps.apple.com/app/dropbox/id327630330','Dropbox-App aus dem App Store')}, damit die Anmeldung schneller geht.</li>
       </ul></div>
-    ${step(1,'B&amp;B in Safari öffnen',`
-      <p style="margin:0">Auf dem iPhone in <b>Safari</b> diese Adresse öffnen:</p>
+    ${step(1,'B&amp;B im Browser öffnen',`
+      <p style="margin:0">Auf dem iPhone in <b>Safari</b> oder <b>Chrome</b> diese Adresse öffnen:</p>
       <div class="row" style="gap:8px"><code id="guideurl">${esc(APP_URL)}</code><button class="btn sm" data-act="copyText" data-target="guideurl">Kopieren</button>
         ${navigator.share?'<button class="btn sm" data-act="shareUrl">Link senden …</button>':''}</div>
       <p class="small muted" style="margin:0">Tipp: Am Mac mit „Link senden …“ per AirDrop oder Nachricht direkt aufs iPhone schicken.</p>`)}
     ${step(2,'Zum Home-Bildschirm hinzufügen',`
       <ol class="steps">
-        <li>Unten in Safari auf das <b>Teilen-Symbol</b> tippen (Quadrat mit Pfeil nach oben). Bei manchen iOS-Versionen erst auf <b>•••</b> tippen.</li>
+        <li><b>Safari:</b> unten auf das <b>Teilen-Symbol</b> tippen (Quadrat mit Pfeil nach oben). Bei manchen iOS-Versionen erst auf <b>•••</b> tippen.<br>
+          <b>Chrome:</b> rechts in der Adressleiste auf das <b>Teilen-Symbol</b> tippen.</li>
         <li>Nach unten scrollen und <b>Zum Home-Bildschirm</b> wählen.</li>
         <li>Prüfen, dass <b>Als Web-App öffnen</b> eingeschaltet ist (falls angezeigt), dann <b>Hinzufügen</b> tippen.</li>
       </ol>
       <p class="small muted" style="margin:0">Auf dem Home-Bildschirm erscheint jetzt das Symbol „B&amp;B Lager“.</p>`)}
     ${step(3,'App vom Home-Bildschirm starten',`
-      <p style="margin:0">Ab jetzt die App <b>immer über das Symbol</b> öffnen, nicht über den Safari-Tab. Die installierte App hat ihren eigenen Speicher und ihre eigene Dropbox-Verbindung.</p>`)}
+      <p style="margin:0">Ab jetzt die App <b>immer über das Symbol</b> öffnen, nicht über den Browser-Tab. Die installierte App hat ihren eigenen Speicher und ihre eigene Dropbox-Verbindung.</p>
+      <p class="small muted" style="margin:0">Am besten pro Gerät bei <b>einer</b> Variante bleiben. Jede Installation (Safari, Chrome, Browser-Tab) muss sich sonst einzeln mit Dropbox verbinden.</p>`)}
     ${step(4,'Mit Dropbox verbinden',`
       <ol class="steps">
         <li>In der App <b>Lager</b> öffnen, unten auf <b>Einstellungen</b> tippen.</li>
@@ -1283,7 +1285,12 @@ function vAnleitung(){
         <li><b>Zugriff entziehen:</b> Jederzeit unter ${ext('https://www.dropbox.com/account/connected_apps','Dropbox › Verknüpfte Apps')} möglich.</li>
       </ul></div>
     <div class="panel stack" style="gap:8px"><h3>Und am Mac?</h3>
-      <p style="margin:0">${ext(APP_URL,'Die App-Adresse')} in Safari oder Chrome öffnen und Schritt 4–5 genauso machen. In Safari lässt sich die App über <b>Ablage › Zum Dock hinzufügen</b> als eigene App ins Dock legen.</p></div>
+      <p style="margin:0">${ext(APP_URL,'Die App-Adresse')} in Safari oder Chrome öffnen, als eigene App installieren und dann Schritt 4–5 genauso machen.</p>
+      <ul class="steps">
+        <li><b>Safari:</b> Menü <b>Ablage › Zum Dock hinzufügen</b>.</li>
+        <li><b>Chrome:</b> rechts in der Adressleiste auf das <b>Installieren-Symbol</b> klicken (Bildschirm mit Pfeil) oder Menü <b>⋮ › Streamen, speichern und teilen › Seite als App installieren …</b> Die App liegt danach unter Programme › Chrome-Apps; ins Dock per Rechtsklick › Optionen › Im Dock behalten.</li>
+      </ul>
+      <p class="small muted" style="margin:0">Die Datei <code>index.html</code> im Dropbox-Ordner nicht direkt öffnen: Sie hat einen eigenen, getrennten Speicher und läuft nicht offline.</p></div>
   </div>`;
 }
 
