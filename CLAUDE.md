@@ -104,5 +104,5 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
    - „Für Event packen“: alles auf einmal als Entnahme buchen.
    - **Reservierungen für bestimmte Daten**: reservierte Menge bleibt im Bestand, ist für andere Termine belegt; Geräte nach dem Event wieder frei, Verbrauchsmaterial weg; Konflikte (z. B. nur eine Maschine) anzeigen; am Event-Tag Reservierung → Entnahme, Reste zurückbuchen.
 2. **„Wer hat gebucht“** – Name pro Gerät/Nutzer an jeder Buchung.
-3. **Personal-Buchungen** – Mitarbeiterplanung; als Modul in derselben App geplant (eine Adresse, ein Dropbox-Ordner). Vorher klären: wer darf Personaldaten sehen (geteilter Ordner = alle sehen alles).
+3. **Personal** – Konzept fertig (Interview 2026-11-01): siehe `docs/personal.md`. Eigene Datei `personal.json`; Events werden mit der Packliste/Reservierung geteilt.
 4. **Code aufteilen**, sobald weitere Module kommen: `index.html` ist groß; Aufteilung in mehrere JS-Dateien ohne Build-Schritt (ES-Module) und `CORE` in `sw.js` entsprechend erweitern.
