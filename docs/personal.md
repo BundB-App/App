@@ -16,7 +16,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 ```js
 {
   persons: { [id]: {id, name, phone, roles: ['gastro','technik','aufbau','abbau'],
-                    payType: 'hour'|'day', rate /* € pro Stunde oder Tagespauschale */, note, updatedAt, deleted?} },
+                    note /* früher payType/rate, wird nicht mehr genutzt */, updatedAt, deleted?} },
   events:  { [id]: {id, name,
                     roles: [{id, name}] /* Kategorien des Events: Vorschläge gastro/technik/aufbau/abbau (id = Schlüssel) oder eigene */,
                     days: [{id, date /* YYYY-MM-DD */, label /* frei, z. B. „Aufbau“ */, cats /* ids der Kategorien an diesem Tag; fehlt = alle */,
@@ -29,7 +29,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
                         planStart, planEnd /* vorausgefüllt aus Event/Schicht */,
                         status: 'angefragt'|'bestaetigt'|'abgesagt',
                         actualStart?, actualEnd? /* von der Teamleitung nach dem Event */,
-                        rate?, payType? /* Vergütung dieses Einsatzes; fehlt → Satz der Person */,
+                        rate?, payType? /* Vergütung dieses Einsatzes, immer eventgebunden */,
                         updatedAt, deleted?} },
   settings: { wa: {id:'wa', text /* Wortlaut WhatsApp-Bestätigung mit {vorname} {name} {event} {tag} {datum} {zeit} {kategorie}; leer = Standard */, updatedAt} },
   meta: { v:1, savedAt, by, resetAt }
@@ -57,7 +57,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Einplanen-Überschriften: Kategorie · Datum des Tages.
 - Kachelfarbe aus `roleCoverage` (bestätigte Planzeiten über das Bedarfsfenster): rot = irgendwann zu wenige, blau = irgendwann zu viele (auch kurze Überschneidung), grün = durchgehend genau. Zeitstrahl zeigt Überbelegung blau mit Uhrzeit.
 - Aufgeklappte Kachel: Ist-Zeit mit sofortiger Differenz; zwei Knöpfe „Termin“ (`settings.wa`) und „Stunden“ (`settings.wa2`, Platzhalter zusätzlich {istzeit} {stunden} {dauer} {betrag}).
-- Aufgeklappte Kachel: hinter der Planzeit Betrag in € mit „/Std.“ oder „/Tag“ pro Einsatz (vorbelegt aus der Person). Fließt als {satz} in beide WhatsApp-Texte, {betrag} = Ist-Stunden × Satz bzw. Pauschale; ohne Betrag „nach Absprache“.
+- Aufgeklappte Kachel: hinter der Planzeit Betrag in € mit „/Std.“ oder „/Tag“ pro Einsatz (immer eventgebunden; Personen haben keinen Satz mehr, alte Werte `rate`/`payType` an Personen werden ignoriert). Fließt als {satz} in beide WhatsApp-Texte, {betrag} = Ist-Stunden × Satz bzw. Pauschale; ohne Betrag „nach Absprache“.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.

@@ -1878,8 +1878,6 @@ function vPPersonen(){
     <div class="grid">
       <label class="f">Name<input id="pp-name" required value="${esc(p.name||'')}" placeholder="Vor- und Nachname"></label>
       <label class="f">Telefon (WhatsApp)<input id="pp-phone" type="tel" value="${esc(p.phone||'')}" placeholder="0171 …"></label>
-      <label class="f">Bezahlung<select id="pp-pay"><option value="hour" ${p.payType!=='day'?'selected':''}>Stundensatz</option><option value="day" ${p.payType==='day'?'selected':''}>Tagespauschale</option></select></label>
-      <label class="f">Betrag in €<input id="pp-rate" inputmode="decimal" value="${p.rate?esc(fmt(p.rate)):''}"></label>
     </div>
     <div><div class="eyebrow" style="margin-bottom:6px">Rollen</div><div class="chips">${Object.entries(ROLES).map(([r,l])=>`<label class="chk"><input type="checkbox" id="pp-role-${r}" ${(p.roles||[]).includes(r)?'checked':''}> ${l}</label>`).join('')}</div></div>
     <label class="f">Notiz<input id="pp-note" value="${esc(p.note||'')}"></label>
@@ -1894,7 +1892,7 @@ function vPPersonen(){
       if(pEditPerson===p.id) return `<div class="item" style="padding:10px">${form(p)}</div>`;
       const next = live('assignments').filter(a=>{ const ev=PS.events[a.eventId]; return a.personId===p.id && a.status!=='abgesagt' && ev && !ev.deleted && dayOf(ev,a).date>=t; }).length;
       return `<div class="item"><button class="head" data-act="pEditPerson" data-id="${p.id}">
-        <span><span class="name">${esc(p.name)}</span><br><span class="small muted">${(p.roles||[]).map(r=>ROLE_SHORT[r]).join(', ')||'keine Rolle'}${p.rate?` · ${eur(p.rate)} ${p.payType==='day'?'pro Tag':'pro Std.'}`:''}${p.phone?' · '+esc(p.phone):''}</span></span>
+        <span><span class="name">${esc(p.name)}</span><br><span class="small muted">${(p.roles||[]).map(r=>ROLE_SHORT[r]).join(', ')||'keine Rolle'}${p.phone?' · '+esc(p.phone):''}</span></span>
         ${next?`<span class="pill">${next} Einsatz${next>1?'e':''}</span>`:'<span></span>'}<span class="muted" aria-hidden="true">›</span></button></div>`; }).join('')}</div>`
       : (pEditPerson ? '' : `<div class="panel empty">Noch keine Personen. Mit „+ Person“ anlegen.</div>`)}
   </div>`;
@@ -1912,9 +1910,8 @@ const WA_TPL = {
         vars:{...WA_VARS, istzeit:'Ist-Zeit', stunden:'Stunden als Zahl, z. B. 8,5', dauer:'Dauer, z. B. 8:30', betrag:'Betrag aus Ist-Zeit × Satz bzw. Pauschale'}}
 };
 const WA_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" style="margin-right:4px"><path d="M8 1.3a6.7 6.7 0 0 0-5.8 10l-.9 3.4 3.5-.9A6.7 6.7 0 1 0 8 1.3Zm0 12.1c-1 0-2-.3-2.8-.8l-.2-.1-2 .5.5-2-.1-.2A5.4 5.4 0 1 1 8 13.4Zm3-4c-.2-.1-1-.5-1.1-.5-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0a4.4 4.4 0 0 1-2.2-1.9c-.2-.3.2-.3.5-1 .1-.1 0-.2 0-.3l-.5-1.2c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2s-.6.6-.6 1.5.7 1.8.8 1.9c.1.1 1.3 2 3.2 2.8 1.2.5 1.6.5 2.2.4.4-.1 1-.4 1.2-.8.1-.4.1-.7.1-.8l-.4-.2Z"/></svg>';
-/* Vergütung pro Einsatz: eigener Wert am Einsatz, sonst der Satz aus der Person */
-function payOf(a){ const p=PS.persons[a.personId]||{};
-  return {rate: a.rate!=null ? Number(a.rate)||0 : Number(p.rate)||0, payType: a.payType || p.payType || 'hour'}; }
+/* Vergütung hängt immer am Einsatz (eventgebunden), nicht an der Person */
+function payOf(a){ return {rate: Number(a.rate)||0, payType: a.payType || 'hour'}; }
 function payTxt(a){ const {rate,payType}=payOf(a); return rate ? eur(rate)+(payType==='day'?' Tagespauschale':' pro Stunde') : 'nach Absprache'; }
 function payTotal(a){ const {rate,payType}=payOf(a), d=dur(a.actualStart,a.actualEnd);
   if(!rate) return 'nach Absprache';
@@ -2239,7 +2236,7 @@ document.addEventListener('click', async e=>{
     case 'pqDay': pq.dayId=id; if(pq.role && !rolesOfDay(PS.events[pq.eventId], pqDay()).some(x=>x.id===pq.role)) pq.role=pq.personId?pqDefaultRole():''; pqTimes(); if(pq.personId) pq.role=pq.role||pqDefaultRole(); renderPQ(); break;
     case 'pqPickP': pq.personId=id; if(!pq.role){ pq.role=pqDefaultRole(); pqTimes(); } renderPQ(); break;
     case 'pqChangeP': pq.personId=''; renderPQ(); $('#pq-q')?.focus(); break;
-    case 'pqNewP': { const nm=pq.q.trim(); const p=put('persons',{id:uid(), name:nm, phone:'', roles:ROLES[pq.role]?[pq.role]:[], payType:'hour', rate:0, note:''}); persist();
+    case 'pqNewP': { const nm=pq.q.trim(); const p=put('persons',{id:uid(), name:nm, phone:'', roles:ROLES[pq.role]?[pq.role]:[], note:''}); persist();
       pq.personId=p.id; if(!pq.role) pq.role=pqDefaultRole(); renderPQ(); toast(`„${nm}“ angelegt. Telefon und Rollen unter Personen ergänzen.`); break; }
     case 'pqRole': pq.role=el.dataset.r; pqTimes(); renderPQ(); break;
     case 'pqShift': pq.shiftId=id||''; pqTimes(); renderPQ(); break;
@@ -2409,7 +2406,7 @@ document.addEventListener('change', e=>{
     peMain[k] = t.value; return; }
   if(t.dataset.pay){ const a=PS.assignments[t.dataset.id];
     if(t.dataset.pay==='rate'){ const n=parseNum(t.value); a.rate = t.value.trim()==='' ? 0 : (isNaN(n) ? payOf(a).rate : n); t.value = a.rate ? fmt(a.rate) : ''; }
-    else { a.payType=t.value; if(a.rate==null) a.rate=payOf(a).rate; }
+    else a.payType=t.value;
     put('assignments',a); persist(); return; }
   if(t.dataset.pa==='actualStart' || t.dataset.pa==='actualEnd'){ const a=PS.assignments[t.dataset.id]; a[t.dataset.pa]=t.value; put('assignments',a); persist();
     const df=istDiff(a), el=$('#ist-d-'+a.id); if(el){ el.textContent=df!=null?hmSigned(df):''; el.className='res '+(df>0?'minus':df<0?'plus':''); }
@@ -2447,7 +2444,7 @@ function savePPerson(id){
   const p = id ? PS.persons[id] : {id:uid()};
   if(id && !foreignChangeOk(p, pPersonStamp, 'Diese Person')) return;
   Object.assign(p, {name, phone:$('#pp-phone').value.trim(), roles:Object.keys(ROLES).filter(r=>$('#pp-role-'+r).checked),
-    payType:$('#pp-pay').value, rate:parseNum($('#pp-rate').value)||0, note:$('#pp-note').value.trim()});
+    note:$('#pp-note').value.trim()});
   put('persons',p); persist(); pEditPerson=null; render(); toast(id?'Gespeichert':'Person angelegt');
 }
 $('#filepick').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) importFile(f, dir, null); });
