@@ -2035,7 +2035,7 @@ function renderTimeline(){
 /* ===================== Schnell buchen Personal ===================== */
 /* Ablauf: Event (oder neu) → Tag → Person → Rolle → geplante Zeit → Status „angefragt“ */
 function pqOpen(eventId, role, dayId){
-  pq = {eventId:'', dayId:'', newEv:null, personId:'', q:'', role:role||'', shiftId:'', planStart:'', planEnd:''};
+  pq = {eventId:'', dayId:'', newEv:null, personId:'', q:'', role:role||'', shiftId:'', planStart:'', planEnd:'', rate:'', payType:'hour'};
   const ev = PS.events[eventId];
   if(ev && !ev.deleted){ pq.eventId=eventId; pq.dayId=(daysOf(ev).find(d=>d.id===dayId)||nextDay(ev)).id; pqTimes(); }
   renderPQ(); setTimeout(()=>{ const f=$('#pq-q'); if(f) f.focus(); }, 30);
@@ -2114,6 +2114,9 @@ function renderPQ(){
       <div class="eyebrow">Geplante Zeit${days.length>1?' · '+esc(dayName(day,days.indexOf(day)))+', '+dShort(day.date):''}${pq.role?' · '+esc(roleName(ev,pq.role)):''}</div>
       ${shifts.length ? `<div class="chips" role="group" aria-label="Schicht"><button data-act="pqShift" data-id="" aria-pressed="${!pq.shiftId}">ganzer Tag</button>${shifts.map(s=>`<button data-act="pqShift" data-id="${s.id}" aria-pressed="${pq.shiftId===s.id}">${esc(s.label||'Schicht')} ${tSpan(s.start,s.end)}</button>`).join('')}</div>` : ''}
       <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">Beginn<input id="pq-start" type="time" value="${esc(pq.planStart)}"></label><label class="f">Ende<input id="pq-end" type="time" value="${esc(pq.planEnd)}"></label></div>
+      <div class="eyebrow">Vergütung</div>
+      <span class="pay"><input id="pq-rate" inputmode="decimal" value="${esc(pq.rate)}" placeholder="–" aria-label="Betrag in €"><span class="muted">€</span>
+        <select id="pq-paytype" aria-label="pro Stunde oder Tag"><option value="hour" ${pq.payType!=='day'?'selected':''}>/Std.</option><option value="day" ${pq.payType==='day'?'selected':''}>/Tag</option></select></span>
       <button class="btn primary" data-act="pqBook" style="justify-content:center;min-height:48px;font-size:16px" ${ready?'':'disabled'}>${ready?'Als „angefragt“ eintragen':!p?'Erst Person wählen':'Erst Kategorie wählen'}</button>` : ''}
   </div></div>`;
 }
@@ -2132,7 +2135,7 @@ function pqBook(){
   if(!ev || !p || !pq.role){ toast('Bitte Event, Person und Kategorie wählen.'); return; }
   if(asgOfDay(ev, day).some(a=>a.personId===p.id && a.role===pq.role)){ toast(`${p.name} ist an diesem Tag schon für ${roleName(ev,pq.role)} eingeplant. Status im Event ändern.`); return; }
   if(!(p.roles||[]).length && ROLES[pq.role]){ p.roles=[pq.role]; put('persons',p); }
-  const a = put('assignments',{id:uid(), eventId:ev.id, dayId:day.id, personId:p.id, role:pq.role, shiftId:pq.shiftId||'', planStart:pq.planStart, planEnd:pq.planEnd, status:'angefragt'});
+  const a = put('assignments',{id:uid(), eventId:ev.id, dayId:day.id, personId:p.id, role:pq.role, shiftId:pq.shiftId||'', planStart:pq.planStart, planEnd:pq.planEnd, status:'angefragt', rate:parseNum(pq.rate)||0, payType:pq.payType||'hour'});
   persist(); pqClose(); if(view==='pEvent' && pEventId===ev.id) pDayId=day.id; render();
   toast(`${p.name} · ${roleName(ev,a.role)} · ${ev.name}: angefragt`, {label:'Rückgängig', fn:()=>{ del('assignments',a.id); persist(); render(); toast('Einsatz entfernt'); }});
 }
@@ -2383,6 +2386,7 @@ document.addEventListener('input', e=>{
     if(t.id==='pq-q'){ pq.q=t.value; $('#pq-list').innerHTML=pqPersonList(); return; }
     if(t.id==='pq-start'){ pq.planStart=t.value; return; }
     if(t.id==='pq-end'){ pq.planEnd=t.value; return; }
+    if(t.id==='pq-rate'){ pq.rate=t.value; return; }
     if(/^pq-ev-/.test(t.id) && pq.newEv){ pq.newEv[t.id.slice(6)]=t.value; return; }
   }
   if(t.id==='search'){ search=t.value; const pos=t.selectionStart; render(); const s=$('#search'); s.focus(); s.setSelectionRange(pos,pos); return; }
@@ -2411,6 +2415,7 @@ document.addEventListener('change', e=>{
     const k = t.id==='pe-mstart' ? 'start' : 'end', old = peMain[k];
     document.querySelectorAll(`#pe-days .pd-${k}`).forEach(i=>{ if(!i.value || i.value===old) i.value=t.value; });
     peMain[k] = t.value; return; }
+  if(t.id==='pq-paytype' && pq){ pq.payType=t.value; return; }
   if(t.dataset.pay){ const a=PS.assignments[t.dataset.id];
     if(t.dataset.pay==='rate'){ const n=parseNum(t.value); a.rate = t.value.trim()==='' ? 0 : (isNaN(n) ? payOf(a).rate : n); t.value = a.rate ? fmt(a.rate) : ''; }
     else a.payType=t.value;
