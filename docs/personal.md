@@ -17,10 +17,12 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 {
   persons: { [id]: {id, name, phone, roles: ['gastro','technik','aufbau','abbau'],
                     payType: 'hour'|'day', rate /* € pro Stunde oder Tagespauschale */, note, updatedAt, deleted?} },
-  events:  { [id]: {id, name, date /* YYYY-MM-DD */, start /* HH:MM */, end,
-                    need: { gastro: 4, technik: 1, aufbau: 2, abbau: 2 },
-                    shifts?: [{id, label, start, end}] /* optional */, updatedAt, deleted?} },
-  assignments: { [id]: {id, eventId, personId, role, shiftId?,
+  events:  { [id]: {id, name,
+                    days: [{id, date /* YYYY-MM-DD */, start /* HH:MM */, end,
+                            need: { gastro: 4, technik: 1, aufbau: 2, abbau: 2 }}],  /* ein Eintrag pro Tag (Unter-Event) */
+                    date, dateEnd, start, end /* Kopie: erster/letzter Tag, für Listen und Reservierung */,
+                    shifts?: [{id, label, start, end}] /* optional, gelten für jeden Tag */, updatedAt, deleted?} },
+  assignments: { [id]: {id, eventId, dayId, personId, role, shiftId?,
                         planStart, planEnd /* vorausgefüllt aus Event/Schicht */,
                         status: 'angefragt'|'bestaetigt'|'abgesagt',
                         actualStart?, actualEnd? /* von der Teamleitung nach dem Event */,
@@ -31,7 +33,9 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 
 - Rollen: Gastronomie, Technik, Aufbauhelfer, Abbauhelfer. Eine Person kann mehrere haben.
 - Bezahlung: **entweder** Stundensatz **oder** Tagespauschale. Nur als Info, die App rechnet keine Kosten aus.
-- Event: nur Name, Datum, Beginn und Ende. Kein Kunde, kein Ort. Die Dauer wird berechnet. Schichten sind optional.
+- Event: Name und Zeitraum von–bis. Jeder Tag ist ein Unter-Event mit eigenem Beginn, Ende und Bedarf (Wunsch Thomas, 2026-11-01). Kein Kunde, kein Ort. Die Dauer wird berechnet. Schichten sind optional.
+- Ältere Events ohne `days` gelten als ein Tag mit der id des Events; Einsätze ohne `dayId` gehören zum ersten Tag.
+- Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
 - Benötigte Anzahl **pro Rolle**. „Bestätigt“ wird gezählt (Status `bestaetigt`), nicht gespeichert.
 - Absagen bleiben als `abgesagt` sichtbar, damit niemand erneut angefragt wird. Das ist Thomas wichtig.
 - Ist-Zeiten: Beginn und Ende, **ohne Pausen**.
