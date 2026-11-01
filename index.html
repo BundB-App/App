@@ -164,6 +164,9 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .save-bar{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 6px 18px rgb(0 0 0 / .18)}
 .save-bar .btn{flex:1;justify-content:center;min-height:44px}
 @media (max-width:760px){.save-bar{bottom:calc(70px + env(safe-area-inset-bottom,0px))}}
+.year{display:grid;gap:8px}
+.year-h{align-items:baseline;padding:0 2px}
+.year-h h2{font-size:26px}
 .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font:500 14px var(--f-body);padding:5px 12px 5px 9px;margin-left:-2px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
 .back span{font:700 20px/1 var(--f-display);margin-top:-2px}
 .back:hover{color:var(--ink);border-color:var(--muted)}
@@ -1438,7 +1441,7 @@ const dayDiff = (a,b) => Math.round((Date.UTC(...b.split('-').map((x,i)=>i===1?x
 function dateRange(from, to){ const out=[]; if(!from) return out; to = to && to>from ? to : from;
   for(let s=from; s<=to && out.length<31; s=addDays(s,1)) out.push(s); return out; }
 let pTile = null;   // aufgeklappte Rollen-Kachel im Event
-let pEventId = null, pDayId = null, pEditEvent = false, pAddEvent = false, pEditPerson = null, pPastOpen = false, pq = null;
+let pEventId = null, pDayId = null, pEditEvent = false, pAddEvent = false, pEditPerson = null, pPastOpen = {}, pq = null;   // pPastOpen: aufgeklappte vergangene Jahre
 
 /* Ein Event hat einen oder mehrere Tage (Unter-Events) mit eigenen Zeiten und eigenem Bedarf:
    days: [{id, date, start, end, need}]. Zusätzlich stehen date/dateEnd/start/end des ersten Tages am Event
@@ -1622,17 +1625,22 @@ function vPersonal(){
       <span><span class="name">${esc(ev.name)}</span><br><span class="small muted">${evWhen(ev)}</span></span>
       ${pill}<span class="muted" aria-hidden="true">›</span></button></div>`;
   };
-  const missing = past.filter(e=>evState(e).missingIst).length;
+  // Nach Jahr des ersten Event-Tages gruppieren; ein Jahr entsteht, sobald ein Event darin liegt
+  const byYear = list => { const m=new Map(); list.forEach(e=>{ const y=evFrom(e).slice(0,4); if(!m.has(y)) m.set(y,[]); m.get(y).push(e); }); return [...m]; };
+  const upYears = byYear(up), pastYears = byYear(past);
   return `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Personal</div><h1>Events</h1></div>
       <button class="btn primary" data-act="pAddEvent">+ Event</button></div>
     ${pAddEvent ? eventFormHtml({}) : ''}
-    ${up.length ? `<div class="list">${up.map(e=>row(e,false)).join('')}</div>`
-      : `<div class="panel empty">Keine anstehenden Events. Mit „+ Event“ oder unten über „Schnell buchen“ anlegen.</div>`}
-    ${past.length ? `<div class="stack" style="gap:8px">
-      <button class="btn" data-act="pPastToggle" aria-expanded="${pPastOpen}" style="justify-content:space-between">
-        <span>Vergangene Events (${past.length})${missing?` · <span style="color:var(--warn)">${missing}× Ist-Zeiten fehlen</span>`:''}</span><span aria-hidden="true">${pPastOpen?'▴':'▾'}</span></button>
-      ${pPastOpen ? `<div class="list">${past.map(e=>row(e,true)).join('')}</div>` : ''}</div>` : ''}
+    ${up.length ? upYears.map(([y,list])=>{ const red=list.filter(e=>evState(e).open).length;
+        return `<section class="year"><div class="row spread year-h"><h2>${y}</h2><span class="small muted">${list.length} Event${list.length>1?'s':''}${red?` · <span style="color:var(--bad)">${red} mit offenen Plätzen</span>`:''}</span></div>
+          <div class="list">${list.map(e=>row(e,false)).join('')}</div></section>`; }).join('')
+      : `<div class="panel empty">Keine anstehenden Events. Mit „+ Event“ anlegen.</div>`}
+    ${pastYears.length ? `<div class="stack" style="gap:8px;margin-top:10px"><div class="eyebrow">Vergangen</div>
+      ${pastYears.map(([y,list])=>{ const open=!!pPastOpen[y], miss=list.filter(e=>evState(e).missingIst).length;
+        return `<button class="btn" data-act="pPastToggle" data-y="${y}" aria-expanded="${open}" style="justify-content:space-between">
+          <span><b>${y}</b> · ${list.length} Event${list.length>1?'s':''}${miss?` · <span style="color:var(--warn)">${miss}× Ist-Zeiten fehlen</span>`:''}</span><span aria-hidden="true">${open?'▴':'▾'}</span></button>
+          ${open ? `<div class="list">${list.map(e=>row(e,true)).join('')}</div>` : ''}`; }).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -1989,7 +1997,7 @@ document.addEventListener('click', async e=>{
     case 'peDelCat': { const ev=PS.events[$('#pEventForm').dataset.id];
       if(ev && asgOf(ev.id).some(a=>a.role===id)){ toast('In dieser Kategorie sind noch Personen eingeplant. Erst dort entfernen.'); return; }
       peReadCats(); peRoles=peRoles.filter(r=>r.id!==id); peRefresh(); break; }
-    case 'pPastToggle': pPastOpen=!pPastOpen; render(); break;
+    case 'pPastToggle': pPastOpen[el.dataset.y]=!pPastOpen[el.dataset.y]; render(); break;
     case 'pDelEvent': del('events',id); asgOf(id).forEach(a=>del('assignments',a.id)); persist(); pEditEvent=false; view='personal'; render(); toast('Event gelöscht'); break;
     case 'pAddShift': { const ev=PS.events[pEventId]; ev.shifts=(ev.shifts||[]).concat({id:uid(), label:'', start:ev.start||'', end:ev.end||''}); put('events',ev); persist(); render(); break; }
     case 'pDelShift': { const ev=PS.events[pEventId]; ev.shifts=(ev.shifts||[]).filter(x=>x.id!==id); put('events',ev);

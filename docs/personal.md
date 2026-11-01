@@ -46,6 +46,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Uhrzeiten am iPhone (Touch): Textfeld mit Zifferntastatur statt Drehrad, „1430“ → „14:30“, springt ins nächste Zeitfeld (`normTime`, `touchTimes`). Am Rechner bleibt `type=time`.
 - Event-Seite: Kacheln im farbigen Block „Übersicht“, darunter abgesetzt „Einplanen“.
 - „Schnell buchen“ nur auf der Startseite. Im Event-Formular schwebt die Leiste Speichern/Abbrechen unten mit (`.save-bar`, sticky); „Event löschen“ steht am Formularende.
+- Event-Liste nach Jahren (Jahr des ersten Tages), sortiert nach Event-Datum; vergangene Events je Jahr unten zugeklappt.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
