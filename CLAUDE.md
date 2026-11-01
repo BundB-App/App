@@ -58,6 +58,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - **Bestand wird nie gespeichert**, sondern immer aus `movements` summiert (`stockMap`).
 - **Löschen = Soft-Delete** (`deleted:true`, neues `updatedAt`), damit der Merge Löschungen übernimmt.
 - **Merge** pro Datensatz: neueres `updatedAt` gewinnt. Mehrere Geräte/Mitarbeiter können offline buchen.
+- **Gleichzeitig offen (2 Geräte):** Hochladen nur mit Versionsprüfung (`rev` aus Header `Dropbox-API-Result`, Upload-Modus `update`); bei Konflikt neu holen, zusammenführen, erneut (bis 5×). Hochgeladen wird nur bei echten Änderungen (`differs`), sonst Ping-Pong. `pollRemote` fragt alle 25 s per `get_metadata` die revs ab. Jeder Datensatz trägt `by` (Geräte-ID `CFG.device`); `warnForeign` meldet fremde Änderungen am offenen Eintrag, `foreignChangeOk` fragt beim Speichern von Event/Person nach. `softRender` zeichnet offene Formulare nicht neu.
 - **Neustart** (Einstellungen): setzt `meta.resetAt`; beim Sync werden auf beiden Seiten alle Datensätze mit `updatedAt <= resetAt` verworfen.
 - Schutz: Fehlt `lager.json` nach einem früheren Sync, wird **nicht** neu angelegt (Ordner umbenannt?), außer `CFG.allowNew`.
 - Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey` (leer → `APP_KEY`), `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.

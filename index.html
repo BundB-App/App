@@ -515,6 +515,9 @@ const BASE_DEFAULT='/Apps/BundB App', BASE_KNOWN=['/Apps/BundB App','/BundB App'
 const APP_KEY='93rr96fr7l814zc';
 let CFG = Object.assign({appKey:'', base:BASE_DEFAULT, ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', authUrl:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
 if(!CFG.appKey) CFG.appKey = APP_KEY;
+/* Kennung dieses Geräts: steht als „by“ an jedem geänderten Datensatz, damit Änderungen anderer Geräte erkannt werden */
+if(!CFG.device){ CFG.device = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2)); lsSet(LS_CFG, CFG); }
+const DEVICE = CFG.device;
 
 /* Personal: eigene Datei personal.json mit eigenem Zustand PS. Nicht in lager.json, denn ältere Geräte
    übernehmen beim Merge nur COLLS und würden neue Sammlungen dort verwerfen.
@@ -526,8 +529,8 @@ let PS = Object.assign(emptyPState(), lsGet(LS_PDATA)||{});
 PCOLLS.forEach(c=>{ if(!PS[c]) PS[c]={}; });
 const store = coll => PCOLLS.includes(coll) ? PS : S;
 
-function put(coll, obj){ obj.updatedAt = now(); store(coll)[coll][obj.id]=obj; return obj; }
-function del(coll, id){ const o=store(coll)[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); } }
+function put(coll, obj){ obj.updatedAt = now(); obj.by = DEVICE; store(coll)[coll][obj.id]=obj; return obj; }
+function del(coll, id){ const o=store(coll)[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); o.by=DEVICE; } }
 const live = coll => Object.values(store(coll)[coll]).filter(o=>!o.deleted);
 function persist(){ lsSet(LS_DATA, S); lsSet(LS_PDATA, PS); scheduleSync(); }
 function saveCfg(){ lsSet(LS_CFG, CFG); }
@@ -598,11 +601,15 @@ const DBX = {
     const r = await fetch('https://content.dropboxapi.com/2/files/download',{method:'POST',headers:{Authorization:'Bearer '+await this.token(),'Dropbox-API-Arg':hdrJson({path})}});
     if(r.status===409){ const t=await r.text(); if(/not_found/.test(t)) return null; throw new Error(t); }
     if(!r.ok) throw new Error('Download fehlgeschlagen ('+r.status+')');
-    return await r.blob();
+    const b = await r.blob();
+    // Versionsnummer der Datei (für sicheres Hochladen); fehlt der Header, wird wie früher überschrieben
+    try{ b.rev = JSON.parse(r.headers.get('Dropbox-API-Result')||'{}').rev || ''; }catch(e){ b.rev=''; }
+    return b;
   },
+  /* mode: 'overwrite', 'add' (mit Umbenennen) oder {'.tag':'update', update:rev} / {'.tag':'add'} (ohne Umbenennen, Konflikt = Fehler) */
   async upload(path, data, mode='overwrite'){
-    const r = await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+await this.token(),'Content-Type':'application/octet-stream','Dropbox-API-Arg':hdrJson({path,mode,autorename:mode!=='overwrite',mute:true})},body:data});
-    if(!r.ok) throw new Error('Upload fehlgeschlagen ('+r.status+'): '+(await r.text()).slice(0,140));
+    const r = await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+await this.token(),'Content-Type':'application/octet-stream','Dropbox-API-Arg':hdrJson({path,mode,autorename:mode==='add',mute:true})},body:data});
+    if(!r.ok){ const t=await r.text(); const e=new Error('Upload fehlgeschlagen ('+r.status+'): '+t.slice(0,140)); e.conflict = r.status===409 && /conflict/.test(t); throw e; }
     return await r.json();
   },
   async list(path){
@@ -622,58 +629,107 @@ function setSync(s,msg=''){ syncState={s,msg}; const el=$('#sync'); el.dataset.s
   el.querySelector('span').textContent = s==='ok' ? 'Synchron' : s==='busy' ? 'Sync …' : s==='err' ? (navigator.onLine===false ? 'Offline' : 'Sync-Fehler') : 'Nicht verbunden';
   el.title = msg || (CFG.lastSync ? 'Zuletzt: '+new Date(CFG.lastSync).toLocaleString('de-DE') : 'Dropbox nicht verbunden'); }
 function scheduleSync(){ if(!DBX.connected) return; clearTimeout(syncTimer); syncTimer=setTimeout(sync, 1200); }
+/* Zwei Geräte gleichzeitig: Hochgeladen wird nur, wenn die Datei in Dropbox seit dem Holen unverändert ist (rev).
+   Hat inzwischen ein anderes Gerät gespeichert, meldet Dropbox einen Konflikt: neu holen, zusammenführen, nochmal.
+   Hochgeladen wird nur bei echten Änderungen, sonst würden sich zwei offene Geräte gegenseitig ständig anstoßen. */
+let SEEN = {lager:'', personal:''};   // zuletzt bekannte Versionsnummern in Dropbox
+const differs = (L, R, colls) => colls.some(c=>{ const A=L[c]||{}, B=R[c]||{};
+  return Object.keys(A).length!==Object.keys(B).length || Object.values(A).some(o=>!B[o.id] || B[o.id].updatedAt!==o.updatedAt); });
+const writeMode = blob => blob ? (blob.rev ? {'.tag':'update', update:blob.rev} : 'overwrite') : {'.tag':'add'};
 async function sync(){
   if(!DBX.connected){ setSync('off'); return; }
   if(syncing){ syncAgain=true; return; }
   syncing=true; setSync('busy');
   try{
-    const before = JSON.stringify(S), pBefore = JSON.stringify(PS);
-    let blob = await DBX.download(P('lager.json'));
-    if(!blob && !CFG.allowNew) blob = await findBase();
-    let resetAt = (S.meta&&S.meta.resetAt)||0;
-    if(blob){
-      const remote = JSON.parse(await blob.text());
-      const rr = (remote.meta&&remote.meta.resetAt)||0, lr = resetAt;
-      // Neustart: alles, was vor dem Neustart entstanden ist, verwerfen (auf beiden Seiten)
-      if(rr>lr) dropBefore(S, rr); else if(lr>rr) dropBefore(remote, lr);
-      resetAt = Math.max(rr, lr);
-      S = merge(S, remote);
-    }
-    else if(CFG.lastSync && !CFG.allowNew){
-      throw new Error(`lager.json wurde weder in „${CFG.base}“ noch in „${BASE_KNOWN.join('“ / „')}“ gefunden. Wurde der Ordner umbenannt oder verschoben? Bitte unter Einstellungen den Ordner anpassen.`);
-    }
-    CFG.allowNew=false;
-    S.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
-    await DBX.upload(P('lager.json'), JSON.stringify(S));
+    const before = JSON.stringify(S), pBefore = JSON.stringify(PS), watch = watched();
+    await syncLager();
     lsSet(LS_DATA,S);
     await syncPersonal(); lsSet(LS_PDATA,PS);
     CFG.lastSync=now(); saveCfg(); setSync('ok');
+    warnForeign(watch);
     if(JSON.stringify({...S,meta:0}) !== JSON.stringify({...JSON.parse(before),meta:0})
       || JSON.stringify({...PS,meta:0}) !== JSON.stringify({...JSON.parse(pBefore),meta:0})) softRender();
   }catch(e){ setSync('err', e.message); }
   syncing=false;
   if(syncAgain){ syncAgain=false; sync(); }
 }
-
-/* personal.json: gleicher Ablauf wie lager.json (Neustart-Marke, Merge pro Datensatz).
-   Hochladen nur bei Änderungen; fehlt die Datei, entsteht sie erst, wenn es etwas zu speichern gibt. */
-async function syncPersonal(){
-  const blob = await DBX.download(P('personal.json'));
-  const remote = blob ? JSON.parse(await blob.text()) : null;
-  let resetAt = (PS.meta&&PS.meta.resetAt)||0;
-  const rr = remote ? (remote.meta&&remote.meta.resetAt)||0 : 0;
-  if(remote){
-    if(rr>resetAt) dropBefore(PS, rr, PCOLLS); else if(resetAt>rr) dropBefore(remote, resetAt, PCOLLS);
-    resetAt = Math.max(rr, resetAt);
-    PS = merge(PS, remote, PCOLLS, emptyPState);
+async function syncLager(){
+  for(let tries=0;; tries++){
+    let blob = await DBX.download(P('lager.json'));
+    if(!blob && !CFG.allowNew) blob = await findBase();
+    let resetAt = (S.meta&&S.meta.resetAt)||0, remote = null;
+    if(blob){
+      remote = JSON.parse(await blob.text());
+      const rr = (remote.meta&&remote.meta.resetAt)||0, lr = resetAt;
+      // Neustart: alles, was vor dem Neustart entstanden ist, verwerfen (auf beiden Seiten)
+      if(rr>lr) dropBefore(S, rr); else if(lr>rr) dropBefore(remote, lr);
+      resetAt = Math.max(rr, lr);
+      S = merge(S, remote);
+      if(blob.rev) SEEN.lager = blob.rev;
+    }
+    else if(CFG.lastSync && !CFG.allowNew){
+      throw new Error(`lager.json wurde weder in „${CFG.base}“ noch in „${BASE_KNOWN.join('“ / „')}“ gefunden. Wurde der Ordner umbenannt oder verschoben? Bitte unter Einstellungen den Ordner anpassen.`);
+    }
+    if(remote && resetAt===((remote.meta&&remote.meta.resetAt)||0) && !differs(S, remote, COLLS)){ S.meta = {...remote.meta}; CFG.allowNew=false; return; }
+    S.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
+    try{ const m = await DBX.upload(P('lager.json'), JSON.stringify(S), writeMode(blob)); SEEN.lager = m.rev||''; CFG.allowNew=false; return; }
+    catch(e){ if(e.conflict && tries<4) continue; throw e; }
   }
-  const changed = !remote ? PCOLLS.some(c=>Object.keys(PS[c]).length)
-    : resetAt!==rr || PCOLLS.some(c=>{ const R=remote[c]||{};
-        return Object.keys(PS[c]).length!==Object.keys(R).length || Object.values(PS[c]).some(o=>!R[o.id] || R[o.id].updatedAt!==o.updatedAt); });
-  PS.meta = {...(remote&&remote.meta||{}), v:1, resetAt};
-  if(!changed) return;
-  PS.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
-  await DBX.upload(P('personal.json'), JSON.stringify(PS));
+}
+/* personal.json: gleicher Ablauf wie lager.json. Fehlt die Datei, entsteht sie erst, wenn es etwas zu speichern gibt. */
+async function syncPersonal(){
+  for(let tries=0;; tries++){
+    const blob = await DBX.download(P('personal.json'));
+    const remote = blob ? JSON.parse(await blob.text()) : null;
+    let resetAt = (PS.meta&&PS.meta.resetAt)||0;
+    const rr = remote ? (remote.meta&&remote.meta.resetAt)||0 : 0;
+    if(remote){
+      if(rr>resetAt) dropBefore(PS, rr, PCOLLS); else if(resetAt>rr) dropBefore(remote, resetAt, PCOLLS);
+      resetAt = Math.max(rr, resetAt);
+      PS = merge(PS, remote, PCOLLS, emptyPState);
+      if(blob.rev) SEEN.personal = blob.rev;
+    }
+    const changed = !remote ? PCOLLS.some(c=>Object.keys(PS[c]).length) : resetAt!==rr || differs(PS, remote, PCOLLS);
+    PS.meta = {...(remote&&remote.meta||{}), v:1, resetAt};
+    if(!changed) return;
+    PS.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
+    try{ const m = await DBX.upload(P('personal.json'), JSON.stringify(PS), writeMode(blob)); SEEN.personal = m.rev||''; return; }
+    catch(e){ if(e.conflict && tries<4) continue; throw e; }
+  }
+}
+
+/* Solange die App offen ist: alle 25 s nur die Versionsnummern abfragen und bei Änderung synchronisieren */
+async function pollRemote(){
+  if(!DBX.connected || syncing || document.visibilityState!=='visible' || navigator.onLine===false) return;
+  const revOf = f => DBX.api('files/get_metadata',{path:P(f)}).then(m=>m.rev||'', e=>/not_found/.test(e.summary||e.message) ? '' : null);
+  const [a,b] = await Promise.all([revOf('lager.json'), revOf('personal.json')]);
+  let changed = false;
+  if(a!==null && a!==SEEN.lager){ SEEN.lager=a; changed=true; }
+  if(b!==null && b!==SEEN.personal){ SEEN.personal=b; changed=true; }
+  if(changed) sync();
+}
+setInterval(pollRemote, 25000);
+
+/* Warnung, wenn ein gerade geöffneter Eintrag auf einem anderen Gerät geändert wurde */
+function watched(){
+  const w = [];
+  if(pEditEvent && pEventId) w.push(['events', pEventId, 'Event']);
+  if(pEditPerson && pEditPerson!=='new') w.push(['persons', pEditPerson, 'Person']);
+  if(openArt && view==='bestand') w.push(['articles', openArt, 'Artikel']);
+  return w.map(([c,id,l])=>({c, id, l, t:(store(c)[c][id]||{}).updatedAt}));
+}
+function warnForeign(list){
+  for(const w of list){
+    const r = store(w.c)[w.c][w.id];
+    if(!r || r.updatedAt===w.t || !r.by || r.by===DEVICE) continue;
+    toast(r.deleted ? `Achtung: ${w.l} „${r.name}“ wurde gerade auf einem anderen Gerät gelöscht.`
+      : `Achtung: ${w.l} „${r.name}“ wurde gerade auf einem anderen Gerät geändert.${w.c==='articles'?'':' Beim Speichern wird nachgefragt.'}`);
+  }
+}
+/* Beim Speichern: wurde der Eintrag seit dem Öffnen von einem anderen Gerät geändert? */
+function foreignChangeOk(rec, stamp, what){
+  if(!rec || rec.updatedAt===stamp || !rec.by || rec.by===DEVICE) return true;
+  return confirm(`${what} wurde inzwischen auf einem anderen Gerät ${rec.deleted?'gelöscht':'geändert'}. Trotzdem speichern? Deine Eingaben ersetzen dann die andere Änderung.`);
 }
 
 /* Ordner verschoben (z. B. von „BundB App“ nach „Apps/BundB App“): an den bekannten Orten nach lager.json suchen
@@ -1508,7 +1564,8 @@ const conflictTxt = list => list.map(c=>`${esc(c.ev.name)} (${tSpan(c.a.planStar
 /* Formular: Zeitraum von–bis, darunter pro Tag Zeiten und Bedarf. Leere Felder statt 0, damit man direkt tippen kann. */
 /* Kategorien im Formular: Zeilen mit Namen, Vorschläge zum Antippen, eigene hinzufügen */
 let peRoles = null;
-let peMain = {start:'', end:''};   // Hauptzeit des Events, Vorschlag für jede Kategorie
+let peMain = {start:'', end:''};
+let pEditStamp = 0, pPersonStamp = 0;   // updatedAt beim Öffnen des Formulars   // Hauptzeit des Events, Vorschlag für jede Kategorie
 function peCatsHtml(){
   const used = peRoles.map(r=>r.id);
   return `${peRoles.length ? peRoles.map(r=>`<div class="pcat"><input class="pc-name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Kategorie" placeholder="Name der Kategorie">
@@ -1561,7 +1618,7 @@ function peRebuild(changed){
   $('#pe-days').innerHTML = peDaysHtml(days);
 }
 function eventFormHtml(ev){
-  if(!peRoles){ peRoles = ev.id ? rolesOf(ev).map(r=>({...r})) : []; peMain = {start:ev.mainStart??ev.start??'', end:ev.mainEnd??ev.end??''}; }
+  if(!peRoles){ pEditStamp = ev.updatedAt||0; peRoles = ev.id ? rolesOf(ev).map(r=>({...r})) : []; peMain = {start:ev.mainStart??ev.start??'', end:ev.mainEnd??ev.end??''}; }
   const days = ev.id ? daysOf(ev) : [];
   const from = days.length ? days[0].date : '', to = days.length>1 ? days[days.length-1].date : '';
   return `<form class="panel stack" id="pEventForm" data-id="${ev.id||''}">
@@ -1589,6 +1646,7 @@ function savePEvent(id){
   if(!roles.length){ toast('Bitte mindestens eine Kategorie wählen.'); return; }
   if(roles.some(r=>!r.name)){ toast('Bitte jeder Kategorie einen Namen geben.'); return; }
   const ev = id ? PS.events[id] : {id:uid()};
+  if(id && !foreignChangeOk(ev, pEditStamp, 'Dieses Event')) return;
   // Kategorien, die wegfallen, dürfen keine Einsätze mehr haben
   if(id){ const gone = asgOf(id).filter(a=>!roles.some(r=>r.id===a.role));
     if(gone.length){ toast(`In „${roleName(ev,gone[0].role)}“ sind noch Personen eingeplant. Erst dort entfernen.`); return; } }
@@ -1915,7 +1973,7 @@ function render(){
 }
 function softRender(){
   const a=document.activeElement;
-  if(IMP || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
+  if(IMP || XL || addingArt || pAddEvent || pEditEvent || pEditPerson || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
   render();
 }
 
@@ -2011,7 +2069,7 @@ document.addEventListener('click', async e=>{
     case 'pIstPlan': { const a=PS.assignments[id]; a.actualStart=a.planStart; a.actualEnd=a.planEnd; put('assignments',a); persist(); render(); break; }
     case 'pDelAsg': del('assignments',id); persist(); render(); toast('Einsatz entfernt'); break;
     case 'pAddPerson': pEditPerson='new'; render(); $('#pp-name')?.focus(); break;
-    case 'pEditPerson': pEditPerson=id; render(); break;
+    case 'pEditPerson': pEditPerson=id; pPersonStamp=(PS.persons[id]||{}).updatedAt||0; render(); break;
     case 'pCancelPerson': pEditPerson=null; render(); break;
     case 'pDelPerson': del('persons',id); pEditPerson=null; persist(); render(); toast('Person gelöscht'); break;
     case 'shareUrl': navigator.share({title:'B&B Lager', url:APP_URL}).catch(()=>{}); break;
@@ -2158,6 +2216,7 @@ document.addEventListener('submit', e=>{
 function savePPerson(id){
   const name=$('#pp-name').value.trim(); if(!name) return;
   const p = id ? PS.persons[id] : {id:uid()};
+  if(id && !foreignChangeOk(p, pPersonStamp, 'Diese Person')) return;
   Object.assign(p, {name, phone:$('#pp-phone').value.trim(), roles:Object.keys(ROLES).filter(r=>$('#pp-role-'+r).checked),
     payType:$('#pp-pay').value, rate:parseNum($('#pp-rate').value)||0, note:$('#pp-note').value.trim()});
   put('persons',p); persist(); pEditPerson=null; render(); toast(id?'Gespeichert':'Person angelegt');
