@@ -57,7 +57,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Einplanen-Überschriften: Kategorie · Datum des Tages.
 - Kachelfarbe aus `roleCoverage` (bestätigte Planzeiten über das Bedarfsfenster): rot = irgendwann zu wenige, blau = irgendwann zu viele (auch kurze Überschneidung), grün = durchgehend genau. Zeitstrahl zeigt Überbelegung blau mit Uhrzeit.
 - Aufgeklappte Kachel: Ist-Zeit mit sofortiger Differenz; zwei Knöpfe „Termin“ (`settings.wa`) und „Stunden“ (`settings.wa2`, Platzhalter zusätzlich {istzeit} {stunden} {dauer} {betrag}).
-- Aufgeklappte Kachel: hinter der Planzeit Betrag in € mit „/Std.“ oder „/Tag“ pro Einsatz (immer eventgebunden; Personen haben keinen Satz mehr, alte Werte `rate`/`payType` an Personen werden ignoriert). Fließt als {satz} in beide WhatsApp-Texte, {betrag} = Ist-Stunden × Satz bzw. Pauschale; ohne Betrag „nach Absprache“.
+- Aufgeklappte Kachel: hinter der Planzeit Betrag in € mit „/Std.“ oder „/Tag“ pro Einsatz, auch in jeder Einplanen-Zeile neben „Ändern“ (immer eventgebunden; Personen haben keinen Satz mehr, alte Werte `rate`/`payType` an Personen werden ignoriert). Fließt als {satz} in beide WhatsApp-Texte, {betrag} = Ist-Stunden × Satz bzw. Pauschale; ohne Betrag „nach Absprache“.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.

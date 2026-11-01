@@ -302,6 +302,9 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .pay{display:flex;align-items:center;gap:4px;flex:none}
 .pay input{width:64px;text-align:right;padding:6px 8px;min-height:36px}
 .pay select{width:auto;padding:6px 4px;min-height:36px}
+.asg-row{position:relative}
+.asg-row .asg-edit{flex:1;min-width:0}
+.asg-row .pay{position:absolute;top:0;right:0}
 </style>
 </head>
 <body>
@@ -1798,7 +1801,7 @@ function asgHtml(a, ev, day){
       <select class="st-sel st-${a.status}" data-pa="status" data-id="${a.id}" aria-label="Status von ${esc(personName(a.personId))}">${Object.keys(STATUS).map(s=>
         `<option value="${s}" ${a.status===s?'selected':''}>${STATUS[s]}</option>`).join('')}</select></div>
     ${conf.length ? `<div class="note small">Am selben Tag schon eingeplant: ${conflictTxt(conf)}</div>` : ''}
-    <div class="row" style="gap:6px">
+    <div class="row asg-row" style="gap:6px">
       <details class="small asg-edit" data-id="${a.id}" ${pOpenEdits.has(a.id)?'open':''}><summary class="btn sm">Ändern</summary>
         <div class="grid" style="margin-top:8px">
           ${days.length>1?`<label class="f">Tag<select data-pa="dayId" data-id="${a.id}">${days.map(d=>`<option value="${d.id}" ${day.id===d.id?'selected':''}>${dWD(d.date)}</option>`).join('')}</select></label>`:''}
@@ -1809,6 +1812,7 @@ function asgHtml(a, ev, day){
         </div>
         <button class="btn sm danger" data-act="pDelAsg" data-id="${a.id}" data-confirm="Wirklich entfernen?" style="margin-top:8px">Einsatz entfernen</button>
       </details>
+      ${payHtml(a)}
     </div>
   </div>`;
 }
@@ -1851,8 +1855,7 @@ function vPEvent(){
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId], df=istDiff(a); return `<div class="tile-p">
           <div class="row spread" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
             <span class="small muted">Plan ${tSpan(a.planStart,a.planEnd)||'–'}</span></span>
-            <span class="pay" title="Vergütung für diesen Einsatz"><input inputmode="decimal" data-pay="rate" data-id="${a.id}" value="${payOf(a).rate?esc(fmt(payOf(a).rate)):''}" placeholder="–" aria-label="Betrag in €"><span class="muted">€</span>
-              <select data-pay="payType" data-id="${a.id}" aria-label="pro Stunde oder Tag"><option value="hour" ${payOf(a).payType!=='day'?'selected':''}>/Std.</option><option value="day" ${payOf(a).payType==='day'?'selected':''}>/Tag</option></select></span>
+            ${payHtml(a)}
             </div>
           <div class="ist">
             <label class="f">Ist Beginn<input type="time" data-pa="actualStart" data-id="${a.id}" value="${esc(a.actualStart||'')}"></label>
@@ -1912,6 +1915,10 @@ const WA_TPL = {
 const WA_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" style="margin-right:4px"><path d="M8 1.3a6.7 6.7 0 0 0-5.8 10l-.9 3.4 3.5-.9A6.7 6.7 0 1 0 8 1.3Zm0 12.1c-1 0-2-.3-2.8-.8l-.2-.1-2 .5.5-2-.1-.2A5.4 5.4 0 1 1 8 13.4Zm3-4c-.2-.1-1-.5-1.1-.5-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0a4.4 4.4 0 0 1-2.2-1.9c-.2-.3.2-.3.5-1 .1-.1 0-.2 0-.3l-.5-1.2c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2s-.6.6-.6 1.5.7 1.8.8 1.9c.1.1 1.3 2 3.2 2.8 1.2.5 1.6.5 2.2.4.4-.1 1-.4 1.2-.8.1-.4.1-.7.1-.8l-.4-.2Z"/></svg>';
 /* Vergütung hängt immer am Einsatz (eventgebunden), nicht an der Person */
 function payOf(a){ return {rate: Number(a.rate)||0, payType: a.payType || 'hour'}; }
+/* Eingabe Betrag + /Std. oder /Tag (in der Kachel und in Einplanen) */
+function payHtml(a){ const {rate,payType}=payOf(a);
+  return `<span class="pay" title="Vergütung für diesen Einsatz"><input inputmode="decimal" data-pay="rate" data-id="${a.id}" value="${rate?esc(fmt(rate)):''}" placeholder="–" aria-label="Betrag in €"><span class="muted">€</span>
+    <select data-pay="payType" data-id="${a.id}" aria-label="pro Stunde oder Tag"><option value="hour" ${payType!=='day'?'selected':''}>/Std.</option><option value="day" ${payType==='day'?'selected':''}>/Tag</option></select></span>`; }
 function payTxt(a){ const {rate,payType}=payOf(a); return rate ? eur(rate)+(payType==='day'?' Tagespauschale':' pro Stunde') : 'nach Absprache'; }
 function payTotal(a){ const {rate,payType}=payOf(a), d=dur(a.actualStart,a.actualEnd);
   if(!rate) return 'nach Absprache';
@@ -2407,6 +2414,7 @@ document.addEventListener('change', e=>{
   if(t.dataset.pay){ const a=PS.assignments[t.dataset.id];
     if(t.dataset.pay==='rate'){ const n=parseNum(t.value); a.rate = t.value.trim()==='' ? 0 : (isNaN(n) ? payOf(a).rate : n); t.value = a.rate ? fmt(a.rate) : ''; }
     else a.payType=t.value;
+    document.querySelectorAll(`[data-pay][data-id="${a.id}"]`).forEach(x=>{ if(x!==t) x.value = x.dataset.pay==='rate' ? (a.rate?fmt(a.rate):'') : (a.payType||'hour'); });
     put('assignments',a); persist(); return; }
   if(t.dataset.pa==='actualStart' || t.dataset.pa==='actualEnd'){ const a=PS.assignments[t.dataset.id]; a[t.dataset.pa]=t.value; put('assignments',a); persist();
     const df=istDiff(a), el=$('#ist-d-'+a.id); if(el){ el.textContent=df!=null?hmSigned(df):''; el.className='res '+(df>0?'minus':df<0?'plus':''); }
