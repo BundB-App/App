@@ -27,7 +27,7 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
 :root{
   --bg:#edf0f1; --surface:#ffffff; --sunk:#e4e9eb; --ink:#152029; --muted:#5a6873; --line:#d3dadf;
   --accent:#17684f; --accent-ink:#ffffff; --accent-soft:#dcece5;
-  --warn:#9a5a12; --warn-soft:#f6e8d3; --bad:#b0281f; --bad-soft:#f7dedb; --good:#17684f;
+  --warn:#9a5a12; --warn-soft:#f6e8d3; --bad:#b0281f; --bad-soft:#f7dedb; --good:#17684f; --info:#1d5fbf;
   --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
@@ -37,11 +37,11 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
-  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; color-scheme:dark}}
+  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
-  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; color-scheme:dark}
+  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{background:var(--bg);color:var(--ink)}
@@ -128,7 +128,7 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 /* Personal */
 .item.amp-red{box-shadow:inset 4px 0 0 var(--bad)} .item.amp-yellow{box-shadow:inset 4px 0 0 var(--warn)} .item.amp-green{box-shadow:inset 4px 0 0 var(--good)}
 .need-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}
-.stat.need.bad b{color:var(--bad)} .stat.need.warn b{color:var(--warn)} .stat.need.ok b{color:var(--good)}
+.stat.need.bad b{color:var(--bad)} .stat.need.warn b{color:var(--warn)} .stat.need.ok b{color:var(--good)} .stat.need.over b{color:var(--info)}
 .asg-head{padding:10px 14px;background:var(--sunk);border-bottom:1px solid var(--line)}
 .asg{display:grid;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
 .asg-head+.asg{border-top:0}
@@ -179,6 +179,9 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .tl-win{border:2px dashed var(--muted);border-radius:6px;z-index:2;pointer-events:none}
 .tl-seg.ok{background:color-mix(in srgb,var(--good) 45%,transparent);color:var(--ink)}
 .tl-seg.bad{background:color-mix(in srgb,var(--bad) 45%,transparent);color:var(--ink)}
+.tl-seg.over{background:color-mix(in srgb,var(--info) 40%,transparent);color:var(--ink)}
+.tl-over{color:var(--info);font-weight:600}
+.wa-btns{gap:6px} .wa-btns .btn{flex:1;justify-content:center}
 .tl-seg.extra{background:color-mix(in srgb,var(--muted) 30%,transparent);color:var(--ink)}
 .tl-p{position:relative;height:18px}
 .tl-p i{background:var(--accent);color:var(--accent-ink);border-radius:4px;justify-content:flex-start;padding:0 5px;white-space:nowrap;overflow:hidden;font-weight:500}
@@ -200,7 +203,7 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .set-arrow{color:var(--muted);font-size:14px}
 .set-body{padding:12px;border-top:1px solid var(--line)}
 .wa-prev{background:var(--accent-soft);border-radius:10px 10px 10px 2px;padding:9px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
-#wa-tpl{min-height:96px;resize:vertical}
+textarea[data-tpl]{min-height:96px;resize:vertical}
 .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font:500 14px var(--f-body);padding:5px 12px 5px 9px;margin-left:-2px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
 .back span{font:700 20px/1 var(--f-display);margin-top:-2px}
 .back:hover{color:var(--ink);border-color:var(--muted)}
@@ -1445,16 +1448,21 @@ function vSetup(){
         <button class="btn danger" data-act="reset">Alles löschen und neu starten</button></div>
     </div>
     `)}
-    ${setSec('personal', 'Personal', 'Wortlaut der WhatsApp-Terminbestätigung', `
-    <div class="panel stack"><h2>WhatsApp-Terminbestätigung</h2>
-      <p class="small muted" style="margin:0">Wortlaut der Nachricht an die Mitarbeiter. Gilt für alle Geräte. Die Angaben in geschweiften Klammern setzt die App selbst ein.</p>
-      <textarea id="wa-tpl" rows="4" aria-label="Wortlaut">${esc(waTemplate())}</textarea>
-      <div class="chips" aria-label="Platzhalter einfügen">${Object.entries(WA_VARS).map(([k,l])=>`<button type="button" data-act="waVar" data-k="${k}" title="${l}">{${k}}</button>`).join('')}</div>
-      <div><div class="eyebrow" style="margin-bottom:4px">Vorschau</div><div class="wa-prev" id="wa-prev">${esc(waFill(waTemplate(), WA_SAMPLE))}</div></div>
-      <div class="row"><button class="btn primary" data-act="waSave">Speichern</button><button class="btn" data-act="waReset">Standardtext</button></div>
-    </div>
+    ${setSec('personal', 'Personal', 'Wortlaut der WhatsApp-Nachrichten (Termin, Stunden)', `
+    ${Object.keys(WA_TPL).map(waEditor).join('')}
     `)}
   </div>`;
+}
+/* Editor für einen WhatsApp-Wortlaut: Text, Platzhalter zum Antippen, Vorschau */
+function waEditor(key){
+  const c = WA_TPL[key];
+  return `<div class="panel stack"><h2>${c.title}</h2>
+      <p class="small muted" style="margin:0">${c.desc} Gilt für alle Geräte. Die Angaben in geschweiften Klammern setzt die App selbst ein.</p>
+      <textarea id="tpl-${key}" data-tpl="${key}" rows="4" aria-label="Wortlaut">${esc(waTemplate(key))}</textarea>
+      <div class="chips" aria-label="Platzhalter einfügen">${Object.entries(c.vars).map(([k,l])=>`<button type="button" data-act="waVar" data-key="${key}" data-k="${k}" title="${l}">{${k}}</button>`).join('')}</div>
+      <div><div class="eyebrow" style="margin-bottom:4px">Vorschau</div><div class="wa-prev" id="prev-${key}">${esc(waFill(waTemplate(key), WA_SAMPLE))}</div></div>
+      <div class="row"><button class="btn primary" data-act="waSave" data-key="${key}">Speichern</button><button class="btn" data-act="waReset" data-key="${key}">Standardtext</button></div>
+    </div>`;
 }
 /* Aufklappbare Bereichs-Einstellungen; ohne eigene Wahl ist der Bereich offen, aus dem man kommt */
 let setOpen = {};
@@ -1826,7 +1834,7 @@ function vPEvent(){
       <div><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dayLine}</h2></div>` : ''}
     ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span>${multi?'<span class="small muted">Kachel antippen: Bestätigte</span>':`<button class="btn sm tl-btn" data-act="pTimeline">${TL_ICON}<span>Zeitstrahl</span></button>`}</div>
       <div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
-        const cls = !n ? (q ? 'warn' : '') : c+q<n ? 'bad' : q ? 'warn' : 'ok';
+        const cls = roleCoverage(ev, day, r).state;   // rot zu wenige, blau überbelegt (auch kurz), grün genau
         return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span>
           ${c ? `<span class="tile-names">${as.filter(a=>a.role===r&&a.status==='bestaetigt').map(a=>personName(a.personId)).sort((x,y)=>x.localeCompare(y)).map(n=>`<span>${esc(n)}</span>`).join('')}</span>` : ''}
           <span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
@@ -1834,13 +1842,13 @@ function vPEvent(){
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId], df=istDiff(a); return `<div class="tile-p">
           <div class="row spread" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
             <span class="small muted">Plan ${tSpan(a.planStart,a.planEnd)||'–'}</span></span>
-            <button class="btn sm" data-act="pWa" data-id="${a.id}" title="${p&&p.phone?'WhatsApp-Chat öffnen':'Keine Nummer hinterlegt: Teilen-Menü'}">${p&&p.phone?'WhatsApp':'Teilen …'}</button></div>
+            </div>
           <div class="ist">
             <label class="f">Ist Beginn<input type="time" data-pa="actualStart" data-id="${a.id}" value="${esc(a.actualStart||'')}"></label>
             <label class="f">Ist Ende<input type="time" data-pa="actualEnd" data-id="${a.id}" value="${esc(a.actualEnd||'')}"></label>
-            ${a.actualStart||a.actualEnd ? `<span class="res ${df>0?'minus':df<0?'plus':''}" id="ist-d-${a.id}">${df!=null?hmSigned(df):''}</span>`
-              : `<button class="btn sm" data-act="pIstPlan" data-id="${a.id}" title="Ist-Zeit wie geplant übernehmen">= Plan</button>`}
-          </div></div>`; }).join('')
+            <span class="res ${df>0?'minus':df<0?'plus':''}" id="ist-d-${a.id}" title="Abweichung zur Planzeit">${df!=null?hmSigned(df):''}</span>
+          </div>
+          <div class="row wa-btns">${[['wa','Termin'],['wa2','Stunden']].map(([k,l])=>`<button class="btn sm" data-act="pWa" data-kind="${k}" data-id="${a.id}">${p&&p.phone?WA_ICON:''}${l}${p&&p.phone?'':' teilen …'}</button>`).join('')}</div></div>`; }).join('')
           : '<div class="small muted">Noch niemand bestätigt.</div>'}</div>` : ''}</section>`
       : `<div class="panel small muted">Für ${multi?'diesen Tag':'dieses Event'} ist noch kein Bedarf eingetragen. Unter „Bearbeiten“ festlegen, wie viele Personen pro Kategorie gebraucht werden.</div>`}
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten. Eintragen: Kachel der Kategorie oben antippen.</div>` : ''}
@@ -1885,23 +1893,32 @@ function vPPersonen(){
    (iPhone: WhatsApp-App über whatsapp://, Rechner: wa.me), sonst Teilen-Menü, sonst Text kopieren */
 /* Wortlaut aus den Einstellungen (für alle Geräte gleich), Platzhalter setzt die App ein */
 const WA_DEFAULT = 'Hallo {vorname}, Terminbestätigung: {event} am {datum}, {zeit} Uhr, Rolle {kategorie}. Danke!';
-const WA_VARS = {vorname:'Vorname', name:'ganzer Name', event:'Event (mit Tag)', tag:'Tag-Bezeichnung', datum:'Datum', zeit:'Uhrzeit', kategorie:'Kategorie'};
-function waTemplate(){ const t=PS.settings.wa; return t && !t.deleted && t.text && t.text.trim() ? t.text : WA_DEFAULT; }
+const WA_VARS = {vorname:'Vorname', name:'ganzer Name', event:'Event (mit Tag)', tag:'Tag-Bezeichnung', datum:'Datum', zeit:'Uhrzeit (Plan)', kategorie:'Kategorie'};
+const WA_TPL = {
+  wa:  {title:'WhatsApp: Terminbestätigung', desc:'Nachricht vor dem Einsatz (Knopf „Termin“).', def:WA_DEFAULT, vars:WA_VARS},
+  wa2: {title:'WhatsApp: geleistete Stunden', desc:'Nachricht nach dem Einsatz mit der Ist-Zeit (Knopf „Stunden“).',
+        def:'Hallo {vorname}, danke für deinen Einsatz bei {event} am {datum}! Deine Arbeitszeit: {istzeit} Uhr, das sind {stunden} Stunden. Viele Grüße',
+        vars:{...WA_VARS, istzeit:'Ist-Zeit', stunden:'Stunden als Zahl, z. B. 8,5', dauer:'Dauer, z. B. 8:30'}}
+};
+const WA_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor" style="margin-right:4px"><path d="M8 1.3a6.7 6.7 0 0 0-5.8 10l-.9 3.4 3.5-.9A6.7 6.7 0 1 0 8 1.3Zm0 12.1c-1 0-2-.3-2.8-.8l-.2-.1-2 .5.5-2-.1-.2A5.4 5.4 0 1 1 8 13.4Zm3-4c-.2-.1-1-.5-1.1-.5-.2-.1-.3-.1-.4.1l-.5.6c-.1.1-.2.1-.4 0a4.4 4.4 0 0 1-2.2-1.9c-.2-.3.2-.3.5-1 .1-.1 0-.2 0-.3l-.5-1.2c-.1-.3-.3-.3-.4-.3h-.3c-.1 0-.3 0-.5.2s-.6.6-.6 1.5.7 1.8.8 1.9c.1.1 1.3 2 3.2 2.8 1.2.5 1.6.5 2.2.4.4-.1 1-.4 1.2-.8.1-.4.1-.7.1-.8l-.4-.2Z"/></svg>';
+function waTemplate(key='wa'){ const t=PS.settings[key]; return t && !t.deleted && t.text && t.text.trim() ? t.text : WA_TPL[key].def; }
 function waFill(tpl, v){ return tpl.replace(/\{(\w+)\}/g, (m,k)=> k in v ? v[k] : m); }
-function waText(a){
+function waText(a, key='wa'){
   const ev = PS.events[a.eventId], p = PS.persons[a.personId], day = dayOf(ev, a);
-  const name = String(p ? p.name : '').trim();
-  return waFill(waTemplate(), {vorname:name.split(/\s+/)[0], name, event:ev.name+(day.label?' ('+day.label+')':''), tag:day.label||'',
-    datum:dWD(day.date), zeit:tSpan(a.planStart,a.planEnd), kategorie:roleName(ev,a.role)});
+  const name = String(p ? p.name : '').trim(), ad = dur(a.actualStart, a.actualEnd);
+  return waFill(waTemplate(key), {vorname:name.split(/\s+/)[0], name, event:ev.name+(day.label?' ('+day.label+')':''), tag:day.label||'',
+    datum:dWD(day.date), zeit:tSpan(a.planStart,a.planEnd), kategorie:roleName(ev,a.role),
+    istzeit:tSpan(a.actualStart,a.actualEnd), stunden: ad!=null ? fmt(ad/60) : '', dauer: ad!=null ? hm(ad) : ''});
 }
-const WA_SAMPLE = {vorname:'Anna', name:'Anna Schmidt', event:'Hochzeit Müller (Aufbau)', tag:'Aufbau', datum:'Sa, 12.06.2027', zeit:'14:00–23:00', kategorie:'Gastronomie'};
+const WA_SAMPLE = {vorname:'Anna', name:'Anna Schmidt', event:'Hochzeit Müller (Aufbau)', tag:'Aufbau', datum:'Sa, 12.06.2027', zeit:'14:00–23:00', kategorie:'Gastronomie', istzeit:'14:00–22:30', stunden:'8,5', dauer:'8:30'};
 function waPhone(s){
   let d = String(s||'').replace(/[^\d+]/g,'');
   if(d.startsWith('+')) d=d.slice(1); else if(d.startsWith('00')) d=d.slice(2); else if(d.startsWith('0')) d='49'+d.slice(1);
   return d.replace(/\D/g,'');
 }
-async function waShare(a){
-  const text = waText(a), tel = waPhone(PS.persons[a.personId]?.phone);
+async function waShare(a, key='wa'){
+  if(key==='wa2' && !(a.actualStart && a.actualEnd)){ toast('Erst Ist Beginn und Ist Ende eintragen.'); return; }
+  const text = waText(a, key), tel = waPhone(PS.persons[a.personId]?.phone);
   if(tel){
     if(TOUCH) location.href = 'whatsapp://send?phone='+tel+'&text='+encodeURIComponent(text);
     else window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(text), '_blank', 'noopener');
@@ -1919,39 +1936,54 @@ const TL_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="tr
 let tlDayId = null;
 function tlOpen(){ tlDayId = pDayId; renderTimeline(); }
 function tlClose(){ tlDayId = null; $('#qbRoot').innerHTML=''; }
+/* Zeitachse eines Tages: Minuten ab dem frühesten Bedarfsbeginn; Zeiten nach Mitternacht laufen weiter (26:00 = 02:00) */
+function dayAxis(ev, day){
+  const as = asgOfDay(ev, day).filter(a=>a.status==='bestaetigt');
+  const need0 = rolesOfDay(ev, day).map(r=>mins(roleTime(day,r.id).start)).filter(x=>x!=null), asg0 = as.map(a=>mins(a.planStart)).filter(x=>x!=null);
+  const base = need0.length ? Math.min(...need0) : asg0.length ? Math.min(...asg0) : 0;
+  const rel = t => { const m = ((mins(t)-base)%1440+1440)%1440; return m>18*60 ? m-1440 : m; };
+  const span = (s,e) => { if(!s || !e) return null; const a=rel(s); return [a, a+(dur(s,e)||0)]; };
+  const clock = m => { const x=((base+m)%1440+1440)%1440; return `${String(Math.floor(x/60)).padStart(2,'0')}:${String(x%60).padStart(2,'0')}`; };
+  return {as, span, clock};
+}
+/* Abdeckung einer Kategorie über die Bedarfszeit (bestätigte Personen mit Planzeit):
+   Abschnitte mit Anzahl; state = bad (irgendwann zu wenige), over (irgendwann zu viele, auch kurz), ok (durchgehend genau) */
+function roleCoverage(ev, day, r, ax=dayAxis(ev, day)){
+  const n = Number((day.need||{})[r])||0, t = roleTime(day,r), w = ax.span(t.start,t.end);
+  const mine = ax.as.filter(a=>a.role===r), ppl = mine.map(a=>({a, x:ax.span(a.planStart,a.planEnd)})).filter(o=>o.x);
+  const pts = new Set(); if(w){ pts.add(w[0]); pts.add(w[1]); } ppl.forEach(o=>{ pts.add(o.x[0]); pts.add(o.x[1]); });
+  const ps = [...pts].sort((x,y)=>x-y), segs = [];
+  for(let i=0;i<ps.length-1;i++){
+    const x=ps[i], y=ps[i+1]; if(y<=x) continue;
+    const cnt = ppl.filter(o=>o.x[0]<=x && o.x[1]>=y).length, inW = w && n && w[0]<=x && y<=w[1];
+    const cls = inW ? (cnt<n ? 'bad' : cnt>n ? 'over' : 'ok') : cnt ? 'extra' : '';
+    const last = segs[segs.length-1];
+    if(last && last.cls===cls && last.cnt===cnt && last.y===x) last.y=y; else segs.push({x, y, cnt, cls});
+  }
+  const c = mine.length;
+  const state = !n ? '' : (!w || ppl.length<c) ? (c<n ? 'bad' : c>n ? 'over' : 'ok')
+    : segs.some(g=>g.cls==='bad') ? 'bad' : segs.some(g=>g.cls==='over') ? 'over' : 'ok';
+  return {n, t, w, ppl, segs, state};
+}
 function renderTimeline(){
   const ev = PS.events[pEventId]; if(!ev || tlDayId==null) return;
   const days = daysOf(ev), day = days.find(d=>d.id===tlDayId) || days[0];
-  const as = asgOfDay(ev, day).filter(a=>a.status==='bestaetigt');
+  const ax = dayAxis(ev, day), as = ax.as, clock = ax.clock;
   const roles = rolesOfDay(ev, day).filter(r=>(Number((day.need||{})[r.id])||0)>0 || as.some(a=>a.role===r.id));
-  // Zeitachse ab dem frühesten Bedarfsbeginn; Zeiten nach Mitternacht laufen weiter (z. B. 26:00 = 02:00)
-  const need0 = roles.map(r=>mins(roleTime(day,r.id).start)).filter(x=>x!=null), asg0 = as.map(a=>mins(a.planStart)).filter(x=>x!=null);
-  const base = need0.length ? Math.min(...need0) : asg0.length ? Math.min(...asg0) : 0;
-  const rel = t => { let m = ((mins(t)-base)%1440+1440)%1440; return m>18*60 ? m-1440 : m; };
-  const span = (s,e) => { if(!s || !e) return null; const a=rel(s); return [a, a+(dur(s,e)||0)]; };
+  const covs = roles.map(r=>roleCoverage(ev, day, r.id, ax));
   const all = [];
-  roles.forEach(r=>{ const t=roleTime(day,r.id), w=span(t.start,t.end); if(w) all.push(...w); });
-  as.forEach(a=>{ const x=span(a.planStart,a.planEnd); if(x) all.push(...x); });
+  covs.forEach(c=>{ if(c.w) all.push(...c.w); c.ppl.forEach(o=>all.push(...o.x)); });
   const lo = all.length ? Math.floor(Math.min(...all)/60)*60 : 0, hi = all.length ? Math.ceil(Math.max(...all)/60)*60 : 60;
   const W = Math.max(60, hi-lo), pct = m => ((m-lo)/W*100).toFixed(2)+'%', wid = (a,b) => ((b-a)/W*100).toFixed(2)+'%';
-  const clock = m => { const x=((base+m)%1440+1440)%1440; return `${String(Math.floor(x/60)).padStart(2,'0')}:${String(x%60).padStart(2,'0')}`; };
   const step = W>12*60 ? 120 : 60;
   const axis = []; for(let m=lo; m<=hi; m+=step) axis.push(`<span style="left:${pct(m)}">${clock(m).slice(0,2)}</span>`);
-  const rows = roles.map(r=>{
-    const n = Number((day.need||{})[r.id])||0, t = roleTime(day,r.id), w = span(t.start,t.end);
-    const ppl = as.filter(a=>a.role===r.id).map(a=>({a, x:span(a.planStart,a.planEnd)})).filter(o=>o.x);
-    const pts = new Set([lo, hi]); if(w){ pts.add(w[0]); pts.add(w[1]); } ppl.forEach(o=>{ pts.add(o.x[0]); pts.add(o.x[1]); });
-    const ps = [...pts].sort((x,y)=>x-y), segs = [], gaps = [];
-    for(let i=0;i<ps.length-1;i++){
-      const x=ps[i], y=ps[i+1]; if(y<=x) continue;
-      const cnt = ppl.filter(o=>o.x[0]<=x && o.x[1]>=y).length, inW = w && n && w[0]<=x && y<=w[1];
-      const cls = inW ? (cnt>=n ? 'ok' : 'bad') : cnt ? 'extra' : '';
-      const last = segs[segs.length-1];
-      if(last && last.cls===cls && last.cnt===cnt && last.y===x) last.y=y; else segs.push({x, y, cnt, cls});
-    }
-    segs.filter(g=>g.cls==='bad').forEach(g=>gaps.push(`${clock(g.x)}–${clock(g.y)}: ${g.cnt} von ${n}`));
+  const rows = roles.map((r,ri)=>{
+    const {n, t, w, ppl, segs} = covs[ri];
+    const list = cls => segs.filter(g=>g.cls===cls).map(g=>`${clock(g.x)}–${clock(g.y)}: ${g.cnt} von ${n}`).join(' · ');
+    const gaps = list('bad'), overs = list('over');
     const verdict = !n ? '<span class="muted">Kein Bedarf eingetragen</span>' : !w ? '<span class="muted">Keine Bedarfszeit eingetragen</span>'
-      : gaps.length ? `<span class="tl-bad">⚠ Zu wenige: ${gaps.join(' · ')}</span>` : `<span class="tl-ok">✓ Durchgehend mindestens ${n} bestätigt</span>`;
+      : (gaps ? `<span class="tl-bad">⚠ Zu wenige: ${gaps}</span>` : '') + (gaps && overs ? '<br>' : '') + (overs ? `<span class="tl-over">Überbelegt: ${overs}</span>` : '')
+        || `<span class="tl-ok">✓ Durchgehend genau ${n} bestätigt</span>`;
     return `<div class="tl-row">
       <div class="row spread" style="align-items:baseline"><b>${esc(r.name)}</b><span class="small muted">Bedarf ${n||'–'}${w?' · '+tSpan(t.start,t.end):''}</span></div>
       <div class="tl-bar">${w&&n?`<i class="tl-win" style="left:${pct(w[0])};width:${wid(w[0],w[1])}"></i>`:''}${segs.filter(g=>g.cls).map(g=>`<i class="tl-seg ${g.cls}" style="left:${pct(g.x)};width:${wid(g.x,g.y)}" title="${clock(g.x)}–${clock(g.y)}: ${g.cnt}">${(g.y-g.x)/W>.06?g.cnt:''}</i>`).join('')}</div>
@@ -1963,7 +1995,7 @@ function renderTimeline(){
     <div class="small muted">${esc(ev.name)} · ${dWD(day.date)}${day.label?' · '+esc(day.label):''}. Gezählt werden bestätigte Personen mit ihrer geplanten Zeit.</div>
     ${days.length>1 ? `<div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="tlDay" data-id="${x.id}" aria-pressed="${x.id===day.id}">${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div>` : ''}
     ${roles.length ? `<div class="tl-axis">${axis.join('')}</div>${rows}
-      <div class="tl-legend small"><span><i class="tl-seg ok"></i>gedeckt</span><span><i class="tl-seg bad"></i>zu wenige</span><span><i class="tl-seg extra"></i>außerhalb Bedarf</span></div>`
+      <div class="tl-legend small"><span><i class="tl-seg ok"></i>genau richtig</span><span><i class="tl-seg bad"></i>zu wenige</span><span><i class="tl-seg over"></i>überbelegt</span><span><i class="tl-seg extra"></i>außerhalb Bedarf</span></div>`
       : '<div class="panel small muted">Für diesen Tag ist weder Bedarf noch eine bestätigte Person eingetragen.</div>'}
   </div></div>`;
 }
@@ -2216,8 +2248,7 @@ document.addEventListener('click', async e=>{
     case 'peCopyDay1': { const f=[...document.querySelectorAll('#pe-days .pday')]; const src=f[0];
       f.slice(1).forEach(x=>x.querySelectorAll('.prole[data-r] input').forEach(i=>{ const v=src.querySelector(`.prole[data-r="${i.closest('.prole').dataset.r}"] .${i.classList[0]}`); if(v) i.value=v.value; }));
       toast('Von Tag 1 übertragen. Zum Übernehmen „Speichern“ tippen.'); break; }
-    case 'pWa': waShare(PS.assignments[id]); break;
-    case 'pIstPlan': { const a=PS.assignments[id]; a.actualStart=a.planStart; a.actualEnd=a.planEnd; put('assignments',a); persist(); render(); break; }
+    case 'pWa': waShare(PS.assignments[id], el.dataset.kind||'wa'); break;
     case 'pDelAsg': del('assignments',id); persist(); render(); toast('Einsatz entfernt'); break;
     case 'pAddPerson': pEditPerson='new'; render(); $('#pp-name')?.focus(); break;
     case 'pEditPerson': pEditPerson=id; pPersonStamp=(PS.persons[id]||{}).updatedAt||0; render(); break;
@@ -2247,10 +2278,10 @@ document.addEventListener('click', async e=>{
     case 'theme': { const t=el.dataset.t; CFG.theme = t==='auto' ? '' : t; saveCfg();
       if(CFG.theme) document.documentElement.dataset.theme=CFG.theme; else delete document.documentElement.dataset.theme;
       render(); break; }
-    case 'waVar': { const t=$('#wa-tpl'), k='{'+el.dataset.k+'}', a=t.selectionStart??t.value.length, b=t.selectionEnd??a;
-      t.value=t.value.slice(0,a)+k+t.value.slice(b); t.focus(); t.setSelectionRange(a+k.length,a+k.length); $('#wa-prev').textContent=waFill(t.value||WA_DEFAULT, WA_SAMPLE); break; }
-    case 'waSave': { const v=$('#wa-tpl').value.trim(); put('settings',{id:'wa', text: v===WA_DEFAULT ? '' : v}); persist(); $('#wa-tpl').blur(); render(); toast('Wortlaut gespeichert'); break; }
-    case 'waReset': $('#wa-tpl').value=WA_DEFAULT; $('#wa-prev').textContent=waFill(WA_DEFAULT, WA_SAMPLE); toast('Standardtext eingesetzt. Zum Übernehmen „Speichern“ tippen.'); break;
+    case 'waVar': { const key=el.dataset.key, t=$('#tpl-'+key), k='{'+el.dataset.k+'}', a=t.selectionStart??t.value.length, b=t.selectionEnd??a;
+      t.value=t.value.slice(0,a)+k+t.value.slice(b); t.focus(); t.setSelectionRange(a+k.length,a+k.length); $('#prev-'+key).textContent=waFill(t.value||WA_TPL[key].def, WA_SAMPLE); break; }
+    case 'waSave': { const key=el.dataset.key, v=$('#tpl-'+key).value.trim(); put('settings',{id:key, text: v===WA_TPL[key].def ? '' : v}); persist(); $('#tpl-'+key).blur(); render(); toast('Wortlaut gespeichert'); break; }
+    case 'waReset': { const key=el.dataset.key; $('#tpl-'+key).value=WA_TPL[key].def; $('#prev-'+key).textContent=waFill(WA_TPL[key].def, WA_SAMPLE); toast('Standardtext eingesetzt. Zum Übernehmen „Speichern“ tippen.'); break; }
     case 'setSec': setOpen[el.dataset.k] = el.getAttribute('aria-expanded')!=='true'; render(); break;
     case 'copyKey': navigator.clipboard?.writeText(CFG.appKey).then(()=>toast('App key kopiert'),()=>{ const r=document.createRange(); r.selectNodeContents($('#appkey')); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); }); break;
     case 'sync': if(DBX.connected) sync(); else { view='setup'; render(); } break;
@@ -2311,7 +2342,7 @@ document.addEventListener('input', e=>{
       if(b&&a){ const st=stockMap(); b.innerHTML=`${QB.dir<0?'−':'+'} ${fmt(QB.qty)} ${esc(a.unit)} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt((st[a.id]||0)+QB.dir*QB.qty)}</span>`; } return; }
     if(t.id==='qb-note'){ QB.note=t.value; return; }
   }
-  if(t.id==='wa-tpl'){ $('#wa-prev').textContent=waFill(t.value||WA_DEFAULT, WA_SAMPLE); return; }
+  if(t.dataset.tpl){ const key=t.dataset.tpl; $('#prev-'+key).textContent=waFill(t.value||WA_TPL[key].def, WA_SAMPLE); return; }
   if(t.classList.contains('pc-name')){ document.querySelectorAll(`#pe-days .prole[data-r="${t.dataset.id}"] .prole-n`).forEach(n=>n.textContent=t.value||'…'); return; }
   if(pq){
     if(t.id==='pq-q'){ pq.q=t.value; $('#pq-list').innerHTML=pqPersonList(); return; }

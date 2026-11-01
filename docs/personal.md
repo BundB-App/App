@@ -54,6 +54,8 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Kacheln zeigen die Namen der Bestätigten; aufgeklappt: Plan, WhatsApp, Ist-Zeit (Eintragen dort, speichert ohne Neuzeichnen). Einsatz-Zeilen zeigen Ist nur als Text.
 - Zeitstrahl (Knopf neben den Tagen bzw. in der Übersicht): je Kategorie Bedarfsfenster und Zahl der Bestätigten über die Zeit (Planzeiten), Lücken rot mit Uhrzeit.
 - Einplanen-Überschriften: Kategorie · Datum des Tages.
+- Kachelfarbe aus `roleCoverage` (bestätigte Planzeiten über das Bedarfsfenster): rot = irgendwann zu wenige, blau = irgendwann zu viele (auch kurze Überschneidung), grün = durchgehend genau. Zeitstrahl zeigt Überbelegung blau mit Uhrzeit.
+- Aufgeklappte Kachel: Ist-Zeit mit sofortiger Differenz; zwei Knöpfe „Termin“ (`settings.wa`) und „Stunden“ (`settings.wa2`, Platzhalter zusätzlich {istzeit} {stunden} {dauer}).
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
