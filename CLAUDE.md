@@ -35,8 +35,9 @@ Kein Build-Schritt, kein Framework. Alles liegt im Repository-Root und wird so a
 4. **Beleg einlesen** – `readDocument` (PDF via pdf.js inkl. eingebetteter ZUGFeRD-XML, Foto/Scan via Tesseract, XML, CSV), Regeln/Vorschläge, Posteingang-Warteschlange (`scanInbox`, `runQueue`), `bookImport`.
 5. **Schnellbuchung** – Bottom-Sheet für Bruch/Schwund/Rückgabe usw., mit Rückgängig.
 6. **Bestand aus Excel/CSV** – Import unter Inventur (SheetJS), setzt Bestand per Inventurbuchung.
-7. **Ansichten** – `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`, `vPersonal`; `render()` schreibt `#view` komplett neu.
-8. **Ereignisse** – zentrale Delegation über `data-act` / `data-go` / `data-li` usw.
+7. **Personal** – Ampel (`evState`), Doppelbuchung (`conflicts`), WhatsApp-Text (`waText`/`waShare`), Ansichten `vPersonal` (Events), `vPEvent`, `vPPersonen`, Schnell buchen Personal (`pqOpen`/`renderPQ`/`pqBook`, rechter Knopf `fab-personal`). Konzept: `docs/personal.md`.
+8. **Ansichten** – `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`; `render()` schreibt `#view` komplett neu.
+9. **Ereignisse** – zentrale Delegation über `data-act` / `data-go` / `data-li` usw.
 
 Externe Bibliotheken (versionsgenau gepinnt, per `loadScript` erst bei Bedarf geladen):
 pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS xlsx 0.18.5 (cdnjs).
@@ -61,6 +62,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - Schutz: Fehlt `lager.json` nach einem früheren Sync, wird **nicht** neu angelegt (Ordner umbenannt?), außer `CFG.allowNew`.
 - Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey` (leer → `APP_KEY`), `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.
 - Datenformat-Änderungen müssen abwärtskompatibel sein (ältere Geräte syncen weiter mit). Neue Sammlungen in `COLLS` aufnehmen.
+- **`personal.json`** (Personal: `persons`, `events`, `assignments`, Format in `docs/personal.md`): eigener Zustand `PS`, `localStorage` `bb-personal-data-v1`, Sammlungen `PCOLLS`. `put`/`del`/`live` wählen den Zustand über den Sammlungsnamen. `sync()` ruft nach `lager.json` `syncPersonal()` auf (gleicher Merge, Upload nur bei Änderungen, Datei entsteht erst mit dem ersten Datensatz).
 
 ## Dropbox
 
@@ -104,5 +106,5 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
    - „Für Event packen“: alles auf einmal als Entnahme buchen.
    - **Reservierungen für bestimmte Daten**: reservierte Menge bleibt im Bestand, ist für andere Termine belegt; Geräte nach dem Event wieder frei, Verbrauchsmaterial weg; Konflikte (z. B. nur eine Maschine) anzeigen; am Event-Tag Reservierung → Entnahme, Reste zurückbuchen.
 2. **„Wer hat gebucht“** – Name pro Gerät/Nutzer an jeder Buchung.
-3. **Personal** – Konzept fertig (Interview 2026-11-01): siehe `docs/personal.md`. Eigene Datei `personal.json`; Events werden mit der Packliste/Reservierung geteilt.
+3. ~~Personal~~ – gebaut 2026-11-01 (siehe `docs/personal.md`). Events in `personal.json` sollen von der Packliste/Reservierung mitgenutzt werden.
 4. **Code aufteilen**, sobald weitere Module kommen: `index.html` ist groß; Aufteilung in mehrere JS-Dateien ohne Build-Schritt (ES-Module) und `CORE` in `sw.js` entsprechend erweitern.
