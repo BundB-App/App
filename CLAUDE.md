@@ -59,7 +59,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - **Merge** pro Datensatz: neueres `updatedAt` gewinnt. Mehrere Geräte/Mitarbeiter können offline buchen.
 - **Neustart** (Einstellungen): setzt `meta.resetAt`; beim Sync werden auf beiden Seiten alle Datensätze mit `updatedAt <= resetAt` verworfen.
 - Schutz: Fehlt `lager.json` nach einem früheren Sync, wird **nicht** neu angelegt (Ordner umbenannt?), außer `CFG.allowNew`.
-- Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey`, `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.
+- Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey` (leer → `APP_KEY`), `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.
 - Datenformat-Änderungen müssen abwärtskompatibel sein (ältere Geräte syncen weiter mit). Neue Sammlungen in `COLLS` aufnehmen.
 
 ## Dropbox
@@ -72,7 +72,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
   - `Inventur/` – CSV-Protokolle der Inventuren
   - `App/` – Kopie der App-Dateien, wird bei jedem Release mitgespiegelt (maßgeblich ist das Repository)
   - `Vorlage_Lagerbestand.xlsx` – Vorlage für den Bestandsimport
-- Dropbox-App: „Scoped access“, „Full Dropbox“, Rechte `files.metadata.read`, `files.content.read`, `files.content.write`. App key wird pro Gerät in der App eingetragen, steht **nicht** im Code. „Enable additional users“ ist für Mitarbeiter nötig.
+- Dropbox-App: „Scoped access“, „Full Dropbox“, Rechte `files.metadata.read`, `files.content.read`, `files.content.write`. App key steht fest im Code (`APP_KEY` in `index.html`, nicht geheim, PKCE ohne App secret); Geräte tippen nur „Verbinden“. Unter Einstellungen → Erweitert lässt er sich überschreiben. „Enable additional users“ ist für Mitarbeiter nötig.
 
 ## Release-Ablauf
 

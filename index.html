@@ -435,7 +435,11 @@ let S = Object.assign(emptyState(), lsGet(LS_DATA)||{});
 COLLS.forEach(c=>{ if(!S[c]) S[c]={}; });
 /* Standardordner. Früher lag der Ordner direkt in der Dropbox; die App findet beide Orte selbst (findBase). */
 const BASE_DEFAULT='/Apps/BundB App', BASE_KNOWN=['/Apps/BundB App','/BundB App'];
+/* App key der Dropbox-App „B&B Lager“. Nicht geheim (PKCE, kein App secret); identifiziert nur das Programm.
+   Jede Person meldet sich beim Verbinden mit ihrem eigenen Dropbox-Konto an. */
+const APP_KEY='93rr96fr7l814zc';
 let CFG = Object.assign({appKey:'', base:BASE_DEFAULT, ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
+if(!CFG.appKey) CFG.appKey = APP_KEY;
 
 function put(coll, obj){ obj.updatedAt = now(); S[coll][obj.id]=obj; return obj; }
 function del(coll, id){ const o=S[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); } }
@@ -1160,26 +1164,27 @@ function vSetup(){
     <div class="panel stack">
       <div class="row spread"><h2>Dropbox</h2>${connected?'<span class="pill ok">verbunden</span>':'<span class="pill">nicht verbunden</span>'}</div>
       ${connected ? `
-        <div class="row" style="gap:8px"><span class="small muted">App key</span><code id="appkey">${esc(CFG.appKey)}</code><button class="btn sm" data-act="copyKey">Kopieren</button></div>
         <div class="row" style="align-items:end"><label class="f" style="flex:1 1 220px">Ordner in der Dropbox<input id="cfg-base2" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
           <button class="btn" data-act="saveBase">Ordner übernehmen</button></div>
         <p style="margin:0">Daten liegen in <code>${esc(P('lager.json'))}</code>. ${CFG.lastSync?'Zuletzt synchronisiert: '+new Date(CFG.lastSync).toLocaleString('de-DE'):''}</p>
         ${syncState.s==='err'?`<div class="note">${esc(syncState.msg)}</div>`:''}
         <div class="row"><button class="btn primary" data-act="sync">Jetzt synchronisieren</button>
-          <button class="btn danger" data-act="disconnect" data-confirm="Wirklich trennen?">Trennen</button></div>`
+          <button class="btn danger" data-act="disconnect" data-confirm="Wirklich trennen?">Trennen</button></div>
+        <details class="small"><summary class="muted">Technische Angaben</summary>
+          <div class="row" style="gap:8px;margin-top:8px"><span class="muted">App key</span><code id="appkey">${esc(CFG.appKey)}</code><button class="btn sm" data-act="copyKey">Kopieren</button></div></details>`
       : `
         <ol class="steps small">
-          <li><b>App key</b> eintragen (bekommst du von Thomas, oder unter Einstellungen auf einem schon verbundenen Gerät kopieren).</li>
-          <li><b>Ordner</b> so lassen: <code>${esc(BASE_DEFAULT.replace(/^\//,''))}</code>. Liegt der Ordner bei dir woanders (z. B. direkt als <code>BundB App</code>), findet die App ihn beim ersten Sync selbst.</li>
           <li><b>Verbinden</b> tippen, dann <b>Dropbox-Freigabe öffnen</b>. Bei Dropbox anmelden, bei der Warnung <b>Weiter</b>, dann <b>Zulassen</b>.</li>
           <li>Den angezeigten <b>Code</b> kopieren, zurück in diese App wechseln, unten einfügen und <b>Code bestätigen</b>.</li>
         </ol>
+        <p class="small muted" style="margin:0">Den Ordner findet die App selbst, egal ob er bei dir als <code>Apps/BundB App</code> oder direkt als <code>BundB App</code> liegt.</p>
         <p class="small muted" style="margin:0">Ausführlich mit Bildschirm-Schritten: <a href="#" data-go="anleitung">Anleitung</a>. Einmal pro Gerät (iPhone, Mac) nötig.</p>
-        <div class="grid">
-          <label class="f">App key<input id="cfg-key" value="${esc(CFG.appKey)}" autocomplete="off" spellcheck="false"></label>
-          <label class="f">Ordner in der Dropbox<input id="cfg-base" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
-        </div>
         <div class="row"><button class="btn primary" data-act="auth">Verbinden</button></div>
+        <details class="small" ${APP_KEY?'':'open'}><summary class="muted">Erweitert: anderer Ordner oder App key</summary>
+          <div class="grid" style="margin-top:8px">
+            <label class="f">Ordner in der Dropbox<input id="cfg-base" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
+            <label class="f">App key<input id="cfg-key" value="${esc(CFG.appKey)}" autocomplete="off" spellcheck="false" placeholder="${esc(APP_KEY)}"></label>
+          </div></details>
         <div id="authStep" hidden class="stack">
           <a class="btn" id="authLink" href="#" target="_blank" rel="noopener">Dropbox-Freigabe öffnen ↗</a>
           <div class="row"><input id="authCode" placeholder="Code aus Dropbox einfügen" style="flex:1 1 220px" autocomplete="off"><button class="btn primary" data-act="authCode">Code bestätigen</button></div>
@@ -1198,7 +1203,7 @@ function vSetup(){
         <li>Dropbox-Ordner <code>${esc(CFG.base.replace(/^\//,''))}</code> mit der Person teilen, Recht „Kann bearbeiten“. Bei ihr erscheint er als <code>BundB App</code>; sie kann ihn ebenfalls nach <code>Apps</code> verschieben, muss aber nicht.</li>
         <li>Einmalig in der Dropbox-App (dropbox.com/developers/apps → Einstellungen) „Enable additional users“ aktivieren.</li>
         <li>Die Person öffnet die App-Adresse, auf dem iPhone in Safari → „Zum Home-Bildschirm“ (siehe <a href="#" data-go="anleitung">Anleitung</a>).</li>
-        <li>In der App unter Einstellungen den App key eintragen, Ordner so lassen, „Verbinden“ und mit dem eigenen Dropbox-Konto anmelden.</li>
+        <li>In der App unter Einstellungen „Verbinden“ tippen und mit dem eigenen Dropbox-Konto anmelden. Mehr ist nicht nötig.</li>
       </ol></div>
     </div>
     <div class="panel stack"><h2>Allgemein</h2>
@@ -1239,7 +1244,6 @@ function vAnleitung(){
       <ul class="steps">
         <li>Ein iPhone mit aktuellem iOS und <b>Safari</b>. Andere Browser können keine Apps zum Home-Bildschirm hinzufügen.</li>
         <li>Ein <b>Dropbox-Konto</b>, in dem der Ordner <b>${folder}</b> liegt (eigener Ordner oder mit dir geteilt).</li>
-        <li>Den <b>App key</b> (von Thomas, oder auf einem verbundenen Gerät unter Einstellungen → Kopieren).</li>
         <li>Optional die ${ext('https://apps.apple.com/app/dropbox/id327630330','Dropbox-App aus dem App Store')}, damit die Anmeldung schneller geht.</li>
       </ul></div>
     ${step(1,'B&amp;B in Safari öffnen',`
@@ -1259,7 +1263,6 @@ function vAnleitung(){
     ${step(4,'Mit Dropbox verbinden',`
       <ol class="steps">
         <li>In der App <b>Lager</b> öffnen, unten auf <b>Einstellungen</b> tippen.</li>
-        <li><b>App key</b> einfügen. Den <b>Ordner</b> so lassen (<code>${esc(BASE_DEFAULT.replace(/^\//,''))}</code>).</li>
         <li><b>Verbinden</b> tippen, dann <b>Dropbox-Freigabe öffnen</b>. Es öffnet sich die Dropbox-Anmeldung.</li>
         <li>Bei Dropbox anmelden. Bei der Warnung „Bevor Sie diese App verknüpfen …“ auf <b>Weiter</b> tippen.</li>
         <li>Auf <b>Zulassen</b> tippen. Dropbox zeigt einen <b>Zugriffscode</b>. Den Code kopieren (lange drücken → Kopieren).</li>
@@ -1409,7 +1412,7 @@ document.addEventListener('click', async e=>{
         DBX.upload(P(`Inventur/Inventur_${date}.csv`), new Blob(['﻿'+csv],{type:'text/csv'}), 'add').catch(e=>toast('Protokoll nicht abgelegt: '+e.message)); }
       render(); toast(n?`${n} Differenzen gebucht`:'Zählung stimmt mit dem Bestand überein'); break; }
     case 'auth': {
-      CFG.appKey = $('#cfg-key').value.trim(); CFG.base = '/'+$('#cfg-base').value.trim().replace(/^\/+|\/+$/g,''); saveCfg();
+      CFG.appKey = $('#cfg-key').value.trim() || APP_KEY; CFG.base = '/'+$('#cfg-base').value.trim().replace(/^\/+|\/+$/g,''); saveCfg();
       if(!CFG.appKey){ toast('Bitte den App key eintragen.'); return; }
       const url = await DBX.startAuth(); $('#authLink').href=url; $('#authStep').hidden=false; $('#authLink').focus(); break; }
     case 'authCode': {
