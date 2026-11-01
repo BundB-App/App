@@ -298,6 +298,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   .mv{grid-template-columns:72px minmax(0,1fr) auto}
   h1{font-size:28px}
 }
+.pday{scroll-margin-top:72px}
 </style>
 </head>
 <body>
@@ -2233,7 +2234,10 @@ document.addEventListener('click', async e=>{
     case 'pOpenEvent': pEventId=id; pDayId=null; pEditEvent=false; view='pEvent'; render(); window.scrollTo(0,0); break;
     case 'pAddEvent': pAddEvent=true; peRoles=null; render(); $('#pe-name')?.focus(); break;
     case 'pCancelEvent': pAddEvent=false; peRoles=null; render(); break;
-    case 'pEditEvent': pEditEvent=!pEditEvent; peRoles=null; render(); break;
+    case 'pEditEvent': pEditEvent=!pEditEvent; peRoles=null; render();
+      // mehrtägig: gleich zum oben gewählten Tag springen
+      if(pEditEvent && daysOf(PS.events[pEventId]).length>1) document.querySelector(`#pe-days .pday[data-id="${pDayId}"]`)?.scrollIntoView({block:'start'});
+      break;
     case 'peAddCat': { peReadCats(); const nid = id || 'k'+uid().replace(/-/g,'').slice(0,10); peRoles.push({id:nid, name:id?ROLES[id]:''});
       peRefresh(cur=>cur.forEach(d=>{ if(d.cats) d.cats.push(nid); }));   // neue Kategorie gilt für alle Tage
       if(!id) document.querySelector(`#pe-cats .pc-name[data-id="${nid}"]`)?.focus(); break; }
