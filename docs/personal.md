@@ -18,6 +18,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
   persons: { [id]: {id, name, phone, roles: ['gastro','technik','aufbau','abbau'],
                     payType: 'hour'|'day', rate /* € pro Stunde oder Tagespauschale */, note, updatedAt, deleted?} },
   events:  { [id]: {id, name,
+                    roles: [{id, name}] /* Kategorien des Events: Vorschläge gastro/technik/aufbau/abbau (id = Schlüssel) oder eigene */,
                     days: [{id, date /* YYYY-MM-DD */, label /* frei, z. B. „Aufbau“ */,
                             need: { gastro: 4, technik: 1, aufbau: 2, abbau: 2 },
                             times: { gastro: {start, end}, … } /* eigene Zeiten pro Rolle */,
@@ -38,6 +39,8 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Event: Name und Zeitraum von–bis. Jeder Tag ist ein Unter-Event mit eigenem Beginn, Ende und Bedarf (Wunsch Thomas, 2026-11-01). Kein Kunde, kein Ort. Die Dauer wird berechnet. Schichten sind optional.
 - Ältere Events ohne `days` gelten als ein Tag mit der id des Events; Einsätze ohne `dayId` gehören zum ersten Tag.
 - Pro Tag und Rolle eigene Anzahl und Zeiten; die Einplanen-Zeile jeder Rolle zeigt diese Zeiten, die Planzeit wird daraus vorausgefüllt.
+- Kategorien (früher feste Rollen) legt jedes Event selbst fest, frei benennbar; die vier Rollen sind Vorschläge. need/times/assignment.role verweisen auf die Kategorie-id. Ältere Events ohne `roles` haben die vier Vorschläge.
+- Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
 - Benötigte Anzahl **pro Rolle**. „Bestätigt“ wird gezählt (Status `bestaetigt`), nicht gespeichert.

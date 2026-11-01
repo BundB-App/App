@@ -131,11 +131,11 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .asg{display:grid;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
 .asg-head+.asg{border-top:0}
 .asg.off>.row:first-child b{text-decoration:line-through;color:var(--muted)}
-.seg.st{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
-.seg.st button{padding:9px 4px;font-size:14px}
-.seg.st button[aria-pressed="true"][data-s="bestaetigt"]{background:var(--accent);color:var(--accent-ink)}
-.seg.st button[aria-pressed="true"][data-s="angefragt"]{background:var(--warn-soft);color:var(--warn)}
-.seg.st button[aria-pressed="true"][data-s="abgesagt"]{background:var(--bad-soft);color:var(--bad)}
+.st-sel{width:auto;flex:none;min-height:0;padding:4px 22px 4px 10px;border:0;border-radius:99px;font:600 12px/1.4 var(--f-body);cursor:pointer;-webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 12px) 55%,calc(100% - 8px) 55%;background-size:4px 4px;background-repeat:no-repeat}
+.st-angefragt{background-color:var(--warn-soft);color:var(--warn)} .st-bestaetigt{background-color:var(--accent-soft);color:var(--good)} .st-abgesagt{background-color:var(--bad-soft);color:var(--bad)}
+.pcat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
 .daychips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
 .daychips button{flex:none;display:grid;grid-template-columns:auto auto;align-items:center;column-gap:2px;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:7px 12px;font:600 14px var(--f-body);cursor:pointer}
 .daychips button small{grid-column:2;font-weight:400;font-size:12px;color:var(--muted)}
@@ -144,11 +144,11 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .dot.amp-red{background:var(--bad)} .dot.amp-yellow{background:var(--warn)} .dot.amp-green{background:var(--good)}
 .pday{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px 12px;margin:0;display:grid;gap:10px;min-width:0}
 .pday legend{font:600 13px var(--f-body);padding:0 6px}
-.prole{display:grid;grid-template-columns:58px 44px minmax(0,1fr) minmax(0,1fr);gap:5px;align-items:center}
+.prole{display:grid;grid-template-columns:minmax(58px,1fr) 44px 78px 78px;gap:5px;align-items:center}
 .prole input{padding:6px 4px;font-size:14px;text-align:center}
 .prole input::-webkit-calendar-picker-indicator{display:none}
 .pday{padding:10px 8px 12px}
-.prole-n{font-size:13px;font-weight:500;overflow-wrap:anywhere}
+.prole-n{font-size:13px;font-weight:500;overflow-wrap:break-word;hyphens:auto;min-width:0}
 .prole-h{font-size:11px;color:var(--muted);font-weight:500;margin-bottom:-4px}
 button.stat.need{all:unset;box-sizing:border-box;display:grid;position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;cursor:pointer}
 button.stat.need b{font:700 24px/1.1 var(--f-display)}
@@ -1388,6 +1388,11 @@ function vAnleitung(){
 /* ===================== Personal ===================== */
 const ROLES = {gastro:'Gastronomie', technik:'Technik', aufbau:'Aufbauhelfer', abbau:'Abbauhelfer'};
 const ROLE_SHORT = {gastro:'Gastro', technik:'Technik', aufbau:'Aufbau', abbau:'Abbau'};
+/* Kategorien legt jedes Event selbst fest (ev.roles = [{id, name}]); ROLES sind nur Vorschläge und die Rollen der Personen.
+   Vorschläge behalten ihren Schlüssel als id, damit Personen-Rollen passen; eigene Kategorien bekommen eine neue id.
+   Ältere Events ohne roles haben die vier Vorschläge. */
+const rolesOf = ev => ev && ev.roles ? ev.roles : Object.entries(ROLES).map(([id,name])=>({id,name}));
+const roleName = (ev, r) => (rolesOf(ev).find(x=>x.id===r)||{}).name || ROLES[r] || r;
 const STATUS = {angefragt:'angefragt', bestaetigt:'bestätigt', abgesagt:'abgesagt'};
 const WD = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 const wdOf = s => { const [y,m,d]=s.split('-').map(Number); return WD[new Date(y,m-1,d).getDay()]; };
@@ -1431,7 +1436,7 @@ const dayName = (day, i) => day.label || `Tag ${i+1}`;
 /* Zeit des Tages = frühester Beginn bis spätestes Ende aller Rollen (über Mitternacht gerechnet) */
 function deriveDayTimes(day){
   let s=null, e=null, sTxt='', eTxt='';
-  for(const r of Object.keys(ROLES)){ const t=(day.times||{})[r]; if(!t || !t.start) continue;
+  for(const r of Object.keys(day.times||{})){ const t=day.times[r]; if(!t || !t.start) continue;
     const a=mins(t.start), b=a+(t.end ? dur(t.start,t.end) : 0);
     if(s==null || a<s){ s=a; sTxt=t.start; } if(t.end && (e==null || b>e)){ e=b; eTxt=t.end; } }
   day.start=sTxt; day.end=eTxt;
@@ -1443,7 +1448,7 @@ const nextDay = ev => { const ds=daysOf(ev); return ds.find(d=>d.date>=today()) 
 function dayState(ev, day){
   const as = asgOfDay(ev, day), need = day.need||{};
   let open = 0;
-  for(const r of Object.keys(ROLES)) open += Math.max(0, (Number(need[r])||0) - as.filter(a=>a.role===r && a.status!=='abgesagt').length);
+  for(const {id:r} of rolesOf(ev)) open += Math.max(0, (Number(need[r])||0) - as.filter(a=>a.role===r && a.status!=='abgesagt').length);
   const req = as.filter(a=>a.status==='angefragt').length;
   const missingIst = day.date<today() ? as.filter(a=>a.status==='bestaetigt' && !(a.actualStart && a.actualEnd)).length : 0;
   return {open, req, missingIst, amp: open ? 'red' : req ? 'yellow' : 'green'};
@@ -1475,23 +1480,38 @@ function pNav(active){
     <button data-go="pPersonen" aria-pressed="${active==='persons'}">Personen</button></div>`;
 }
 /* Formular: Zeitraum von–bis, darunter pro Tag Zeiten und Bedarf. Leere Felder statt 0, damit man direkt tippen kann. */
+/* Kategorien im Formular: Zeilen mit Namen, Vorschläge zum Antippen, eigene hinzufügen */
+let peRoles = null;
+function peCatsHtml(){
+  const used = peRoles.map(r=>r.id);
+  return `${peRoles.length ? peRoles.map(r=>`<div class="pcat"><input class="pc-name" data-id="${r.id}" value="${esc(r.name)}" aria-label="Kategorie" placeholder="Name der Kategorie">
+      <button class="btn sm" type="button" data-act="peDelCat" data-id="${r.id}" aria-label="Kategorie entfernen">×</button></div>`).join('')
+    : '<div class="small muted">Welche Kategorien braucht dieses Event? Vorschlag antippen oder eigene anlegen.</div>'}
+    <div class="chips">${Object.entries(ROLES).filter(([k])=>!used.includes(k)).map(([k,l])=>`<button type="button" data-act="peAddCat" data-id="${k}">+ ${l}</button>`).join('')}
+      <button type="button" data-act="peAddCat">+ Eigene Kategorie</button></div>`;
+}
+/* Namen aus den Eingabefeldern übernehmen */
+function peReadCats(){ document.querySelectorAll('#pe-cats .pc-name').forEach(i=>{ const r=peRoles.find(x=>x.id===i.dataset.id); if(r) r.name=i.value; }); }
+function peRefresh(){ peReadCats(); const cur=peCollect(); $('#pe-cats').innerHTML=peCatsHtml(); $('#pe-days').innerHTML=peDaysHtml(cur); }
 function peDaysHtml(days){
-  if(!days.length) return `<div class="small muted">Datum wählen, dann erscheinen hier die Tage mit Bedarf und Zeiten pro Rolle.</div>`;
+  if(!days.length) return `<div class="small muted">Datum wählen, dann erscheinen hier die Tage mit Bedarf und Zeiten pro Kategorie.</div>`;
+  if(!peRoles.length) return `<div class="small muted">Erst oben die Kategorien wählen, dann hier pro Tag Anzahl und Zeiten eintragen.</div>`;
   const multi = days.length>1;
   return days.map((d,i)=>`<fieldset class="pday" data-id="${d.id||''}" data-date="${d.date}">
       <legend>${multi?`Tag ${i+1} · `:''}${dWD(d.date)}</legend>
       <label class="f">Bezeichnung (optional)<input class="pd-label" value="${esc(d.label||'')}" placeholder="z. B. Aufbau, Hochzeit, Abbau"></label>
       <div class="prole prole-h"><span></span><span>Anzahl</span><span>Beginn</span><span>Ende</span></div>
-      ${Object.entries(ROLES).map(([r,l])=>{ const t=(d.times||{})[r]||{}, n=Number((d.need||{})[r])||'';
+      ${peRoles.map(({id:r,name:l})=>{ const t=(d.times||{})[r]||{}, n=Number((d.need||{})[r])||'';
         // ältere Tage ohne Rollenzeiten: Tageszeit vorschlagen
         const st=t.start||t.end ? t : (d.start||d.end) && n ? {start:d.start,end:d.end} : {};
-        return `<div class="prole" data-r="${r}"><span class="prole-n">${ROLE_SHORT[r]}</span>
+        return `<div class="prole" data-r="${r}"><span class="prole-n">${esc(l||'…')}</span>
           <input type="number" min="0" inputmode="numeric" class="pd-need" aria-label="${l} Anzahl" value="${n}" placeholder="–">
           <input type="time" class="pd-start" aria-label="${l} Beginn" value="${esc(st.start||'')}">
           <input type="time" class="pd-end" aria-label="${l} Ende" value="${esc(st.end||'')}"></div>`; }).join('')}
     </fieldset>`).join('') + (multi ? `<button class="btn sm" type="button" data-act="peCopyDay1">Bedarf und Zeiten von Tag 1 auf alle Tage übertragen</button>` : '');
 }
 function peCollect(){
+  if(!document.querySelector('#pe-days .pday')) return dateRange($('#pe-from').value, $('#pe-to').value).map(date=>({id:'', date, label:'', need:{}, times:{}, start:'', end:''}));
   return [...document.querySelectorAll('#pe-days .pday')].map(f=>{
     const need = {}, times = {};
     f.querySelectorAll('.prole[data-r]').forEach(row=>{ const r=row.dataset.r, n=parseInt(row.querySelector('.pd-need').value,10);
@@ -1514,11 +1534,13 @@ function peRebuild(changed){
   $('#pe-days').innerHTML = peDaysHtml(days);
 }
 function eventFormHtml(ev){
+  if(!peRoles) peRoles = ev.id ? rolesOf(ev).map(r=>({...r})) : [];
   const days = ev.id ? daysOf(ev) : [];
   const from = days.length ? days[0].date : '', to = days.length>1 ? days[days.length-1].date : '';
   return `<form class="panel stack" id="pEventForm" data-id="${ev.id||''}">
     <h3>${ev.id?'Event bearbeiten':'Neues Event'}</h3>
     <label class="f">Name<input id="pe-name" required value="${esc(ev.name||'')}" placeholder="z. B. Hochzeit Müller"></label>
+    <div><div class="eyebrow" style="margin-bottom:6px">Kategorien</div><div id="pe-cats" class="stack" style="gap:8px">${peCatsHtml()}</div></div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="f">Von<input id="pe-from" type="date" required value="${esc(from)}" data-prev="${esc(from)}"></label>
       <label class="f">Bis (bei mehreren Tagen)<input id="pe-to" type="date" value="${esc(to)}"></label></div>
@@ -1529,9 +1551,16 @@ function eventFormHtml(ev){
   </form>`;
 }
 function savePEvent(id){
+  peReadCats();
   const name = $('#pe-name').value.trim(), days = peCollect();
   if(!name || !days.length){ toast('Bitte Name und Datum angeben.'); return; }
+  const roles = peRoles.map(r=>({id:r.id, name:r.name.trim()}));
+  if(!roles.length){ toast('Bitte mindestens eine Kategorie wählen.'); return; }
+  if(roles.some(r=>!r.name)){ toast('Bitte jeder Kategorie einen Namen geben.'); return; }
   const ev = id ? PS.events[id] : {id:uid()};
+  // Kategorien, die wegfallen, dürfen keine Einsätze mehr haben
+  if(id){ const gone = asgOf(id).filter(a=>!roles.some(r=>r.id===a.role));
+    if(gone.length){ toast(`In „${roleName(ev,gone[0].role)}“ sind noch Personen eingeplant. Erst dort entfernen.`); return; } }
   const oldDays = id ? daysOf(ev) : [];
   days.forEach(d=>{ if(!d.id) d.id=uid(); });
   // Tage, die wegfallen, dürfen keine Einsätze mehr haben
@@ -1547,10 +1576,10 @@ function savePEvent(id){
     if(nd && !a.shiftId){ const o=roleTime(od,a.role), n=roleTime(nd,a.role);
       if(a.planStart===o.start && a.planEnd===o.end && (n.start!==o.start || n.end!==o.end)){ a.planStart=n.start; a.planEnd=n.end; put('assignments',a); } }
   });
-  Object.assign(ev, {name, days, date:days[0].date, dateEnd:days[days.length-1].date, start:days[0].start, end:days[0].end});
+  Object.assign(ev, {name, roles, days, date:days[0].date, dateEnd:days[days.length-1].date, start:days[0].start, end:days[0].end});
   delete ev.need;
   put('events',ev);
-  persist(); pAddEvent=false; pEditEvent=false; pEventId=ev.id; pDayId=null; view='pEvent'; render(); window.scrollTo(0,0); toast(id?'Event gespeichert':'Event angelegt');
+  persist(); pAddEvent=false; pEditEvent=false; peRoles=null; pEventId=ev.id; pDayId=null; view='pEvent'; render(); window.scrollTo(0,0); toast(id?'Event gespeichert':'Event angelegt');
 }
 
 function vPersonal(){
@@ -1587,10 +1616,10 @@ function asgHtml(a, ev, day){
   const shifts = ev.shifts||[], days = daysOf(ev);
   const sh = a.shiftId && shifts.find(s=>s.id===a.shiftId);
   return `<div class="asg ${a.status==='abgesagt'?'off':''}">
-    <div><b>${esc(personName(a.personId))}</b><br>
+    <div class="row spread" style="flex-wrap:nowrap;align-items:flex-start"><div style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
       <span class="small muted">Plan ${tSpan(a.planStart,a.planEnd)||'–'}${pd!=null?` (${hm(pd)} Std.)`:''}${sh?' · '+esc(sh.label||'Schicht'):''}</span></div>
-    <div class="seg st" role="group" aria-label="Status von ${esc(personName(a.personId))}">${Object.keys(STATUS).map(s=>
-      `<button data-act="pSetStatus" data-id="${a.id}" data-s="${s}" aria-pressed="${a.status===s}">${STATUS[s]}</button>`).join('')}</div>
+      <select class="st-sel st-${a.status}" data-pa="status" data-id="${a.id}" aria-label="Status von ${esc(personName(a.personId))}">${Object.keys(STATUS).map(s=>
+        `<option value="${s}" ${a.status===s?'selected':''}>${STATUS[s]}</option>`).join('')}</select></div>
     ${conf.length ? `<div class="note small">Am selben Tag schon eingeplant: ${conflictTxt(conf)}</div>` : ''}
     ${showIst ? `<div class="ist">
       <label class="f">Ist Beginn<input type="time" data-pa="actualStart" data-id="${a.id}" value="${esc(a.actualStart||'')}"></label>
@@ -1602,7 +1631,7 @@ function asgHtml(a, ev, day){
       <details class="small asg-edit"><summary class="btn sm">Ändern</summary>
         <div class="grid" style="margin-top:8px">
           ${days.length>1?`<label class="f">Tag<select data-pa="dayId" data-id="${a.id}">${days.map(d=>`<option value="${d.id}" ${day.id===d.id?'selected':''}>${dWD(d.date)}</option>`).join('')}</select></label>`:''}
-          <label class="f">Rolle<select data-pa="role" data-id="${a.id}">${Object.entries(ROLES).map(([r,l])=>`<option value="${r}" ${a.role===r?'selected':''}>${l}</option>`).join('')}</select></label>
+          <label class="f">Kategorie<select data-pa="role" data-id="${a.id}">${rolesOf(ev).map(({id:r,name:l})=>`<option value="${r}" ${a.role===r?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
           ${shifts.length?`<label class="f">Schicht<select data-pa="shiftId" data-id="${a.id}"><option value="">ganzer Tag</option>${shifts.map(s=>`<option value="${s.id}" ${a.shiftId===s.id?'selected':''}>${esc(s.label||'Schicht')} ${tSpan(s.start,s.end)}</option>`).join('')}</select></label>`:''}
           <label class="f">Plan Beginn<input type="time" data-pa="planStart" data-id="${a.id}" value="${esc(a.planStart||'')}"></label>
           <label class="f">Plan Ende<input type="time" data-pa="planEnd" data-id="${a.id}" value="${esc(a.planEnd||'')}"></label>
@@ -1621,7 +1650,7 @@ function vPEvent(){
   const multi = days.length>1, di = days.indexOf(day);
   const as = asgOfDay(ev, day), need = day.need||{}, d = dur(day.start, day.end);
   const order = {bestaetigt:0, angefragt:1, abgesagt:2};
-  const roles = Object.keys(ROLES).filter(r=>(Number(need[r])||0)>0 || as.some(a=>a.role===r));
+  const roles = rolesOf(ev).map(x=>x.id).filter(r=>(Number(need[r])||0)>0 || as.some(a=>a.role===r));
   const s = dayState(ev, day);
   const shifts = ev.shifts||[];
   const dayLine = `${dWD(day.date)}${day.start?' · '+tSpan(day.start,day.end)+' Uhr':''}${d!=null&&day.end?' · '+hm(d)+' Std.':''}`;
@@ -1637,21 +1666,21 @@ function vPEvent(){
       ${shifts.length ? shifts.map(sh=>`<div class="shift"><input aria-label="Bezeichnung" placeholder="z. B. Spätschicht" data-shift="label" data-id="${sh.id}" value="${esc(sh.label||'')}">
         <input type="time" aria-label="Beginn" data-shift="start" data-id="${sh.id}" value="${esc(sh.start||'')}"><input type="time" aria-label="Ende" data-shift="end" data-id="${sh.id}" value="${esc(sh.end||'')}">
         <button class="btn sm danger" data-act="pDelShift" data-id="${sh.id}" aria-label="Schicht löschen">×</button></div>`).join('')
-        : '<div class="small muted">Ohne Schichten gilt für alle die Zeit des Tages.</div>'}</div>` : ''}
+        : '<div class="small muted">Ohne Schichten gilt die Zeit der jeweiligen Kategorie.</div>'}</div>` : ''}
     ${multi ? `<div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div>
       <div><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dayLine}</h2></div>` : ''}
     ${roles.length ? `<div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
         const cls = c+q<n ? 'bad' : q ? 'warn' : 'ok';
-        return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${ROLE_SHORT[r]}</span><b class="num">${c}/${n}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span><span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
-      ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${ROLES[tile]} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
+        return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span><span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
+      ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId]; return `<div class="row spread tile-p" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
           <span class="small muted">${tSpan(a.planStart,a.planEnd)||'–'}${p&&p.phone?' · '+esc(p.phone):''}</span></span>
           <button class="btn sm" data-act="pWa" data-id="${a.id}">WhatsApp</button></div>`; }).join('')
           : '<div class="small muted">Noch niemand bestätigt.</div>'}</div>` : ''}`
-      : `<div class="panel small muted">Für ${multi?'diesen Tag':'dieses Event'} ist noch kein Bedarf eingetragen. Unter „Bearbeiten“ festlegen, wie viele Personen pro Rolle gebraucht werden.</div>`}
+      : `<div class="panel small muted">Für ${multi?'diesen Tag':'dieses Event'} ist noch kein Bedarf eingetragen. Unter „Bearbeiten“ festlegen, wie viele Personen pro Kategorie gebraucht werden.</div>`}
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten.</div>` : ''}
     ${roles.map(r=>{ const list=as.filter(a=>a.role===r).sort((a,b)=>order[a.status]-order[b.status]||personName(a.personId).localeCompare(personName(b.personId)));
-      return `<div class="list"><div class="row spread asg-head"><span><h3>${ROLES[r]}</h3>${rtxt(r)?`<span class="small muted">${rtxt(r)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
+      return `<div class="list"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))}</h3>${rtxt(r)?`<span class="small muted">${rtxt(r)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
         ${list.length ? list.map(a=>asgHtml(a,ev,day)).join('') : '<div class="asg small muted">Noch niemand eingeplant.</div>'}</div>`; }).join('')}
     <div class="row"><button class="btn primary" data-act="pqOpen" data-id="${ev.id}">+ Person einplanen</button></div>
   </div>`;
@@ -1692,7 +1721,7 @@ function vPPersonen(){
 function waText(a){
   const ev = PS.events[a.eventId], p = PS.persons[a.personId], day = dayOf(ev, a);
   const first = String(p ? p.name : '').trim().split(/\s+/)[0];
-  return `Hallo ${first}, Terminbestätigung: ${ev.name}${day.label?' ('+day.label+')':''} am ${dWD(day.date)}, ${tSpan(a.planStart,a.planEnd)} Uhr, Rolle ${ROLES[a.role]||a.role}. Danke!`;
+  return `Hallo ${first}, Terminbestätigung: ${ev.name}${day.label?' ('+day.label+')':''} am ${dWD(day.date)}, ${tSpan(a.planStart,a.planEnd)} Uhr, Rolle ${roleName(ev,a.role)}. Danke!`;
 }
 function waPhone(s){
   let d = String(s||'').replace(/[^\d+]/g,'');
@@ -1727,8 +1756,9 @@ function pqDefaultRole(){
   const ev = PS.events[pq.eventId], p = PS.persons[pq.personId]; if(!ev) return '';
   const day = pqDay(), as = asgOfDay(ev, day), need = day.need||{};
   const open = r => (Number(need[r])||0) > as.filter(a=>a.role===r && a.status!=='abgesagt').length;
-  const mine = p && p.roles && p.roles.length ? p.roles : [];
-  return mine.find(open) || mine[0] || Object.keys(ROLES).find(open) || '';
+  const cats = rolesOf(ev).map(x=>x.id);
+  const mine = (p && p.roles || []).filter(r=>cats.includes(r));
+  return mine.find(open) || mine[0] || cats.find(open) || '';
 }
 function pqPersonList(){
   const ev = PS.events[pq.eventId], day = pqDay(); const q = normText(pq.q);
@@ -1784,12 +1814,12 @@ function renderPQ(){
       ${p ? `<div class="row spread panel" style="padding:10px 12px;flex-wrap:nowrap"><span style="min-width:0"><b>${esc(p.name)}</b><br><span class="small muted">${(p.roles||[]).map(r=>ROLE_SHORT[r]).join(', ')||'keine Rolle hinterlegt'}</span></span><button class="btn sm" data-act="pqChangeP">Ändern</button></div>`
         : `<label class="f">Person suchen<input id="pq-q" type="search" placeholder="Name" value="${esc(pq.q)}" autocomplete="off"></label><div class="qb-list" id="pq-list">${pqPersonList()}</div>`}
       ${conf.length ? `<div class="note">⚠ ${esc(p.name)} ist am ${dWD(day.date)} schon eingeplant: ${conflictTxt(conf)}. Buchen ist trotzdem möglich.</div>` : ''}
-      <div class="eyebrow">Rolle</div>
-      <div class="chips" role="group" aria-label="Rolle">${Object.entries(ROLES).map(([r,l])=>`<button data-act="pqRole" data-r="${r}" aria-pressed="${pq.role===r}">${l}</button>`).join('')}</div>
-      <div class="eyebrow">Geplante Zeit${days.length>1?' · '+esc(dayName(day,days.indexOf(day)))+', '+dShort(day.date):''}${pq.role?' · '+ROLES[pq.role]:''}</div>
+      <div class="eyebrow">Kategorie</div>
+      <div class="chips" role="group" aria-label="Kategorie">${rolesOf(ev).map(({id:r,name:l})=>`<button data-act="pqRole" data-r="${r}" aria-pressed="${pq.role===r}">${esc(l)}</button>`).join('')}</div>
+      <div class="eyebrow">Geplante Zeit${days.length>1?' · '+esc(dayName(day,days.indexOf(day)))+', '+dShort(day.date):''}${pq.role?' · '+esc(roleName(ev,pq.role)):''}</div>
       ${shifts.length ? `<div class="chips" role="group" aria-label="Schicht"><button data-act="pqShift" data-id="" aria-pressed="${!pq.shiftId}">ganzer Tag</button>${shifts.map(s=>`<button data-act="pqShift" data-id="${s.id}" aria-pressed="${pq.shiftId===s.id}">${esc(s.label||'Schicht')} ${tSpan(s.start,s.end)}</button>`).join('')}</div>` : ''}
       <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">Beginn<input id="pq-start" type="time" value="${esc(pq.planStart)}"></label><label class="f">Ende<input id="pq-end" type="time" value="${esc(pq.planEnd)}"></label></div>
-      <button class="btn primary" data-act="pqBook" style="justify-content:center;min-height:48px;font-size:16px" ${ready?'':'disabled'}>${ready?'Als „angefragt“ eintragen':!p?'Erst Person wählen':'Erst Rolle wählen'}</button>` : ''}
+      <button class="btn primary" data-act="pqBook" style="justify-content:center;min-height:48px;font-size:16px" ${ready?'':'disabled'}>${ready?'Als „angefragt“ eintragen':!p?'Erst Person wählen':'Erst Kategorie wählen'}</button>` : ''}
   </div></div>`;
 }
 function pqCreateEv(){
@@ -1804,12 +1834,12 @@ function pqCreateEv(){
 }
 function pqBook(){
   const ev = PS.events[pq.eventId], p = PS.persons[pq.personId], day = pqDay();
-  if(!ev || !p || !pq.role){ toast('Bitte Event, Person und Rolle wählen.'); return; }
-  if(asgOfDay(ev, day).some(a=>a.personId===p.id && a.role===pq.role)){ toast(`${p.name} ist an diesem Tag schon für ${ROLES[pq.role]} eingeplant. Status im Event ändern.`); return; }
-  if(!(p.roles||[]).length){ p.roles=[pq.role]; put('persons',p); }
+  if(!ev || !p || !pq.role){ toast('Bitte Event, Person und Kategorie wählen.'); return; }
+  if(asgOfDay(ev, day).some(a=>a.personId===p.id && a.role===pq.role)){ toast(`${p.name} ist an diesem Tag schon für ${roleName(ev,pq.role)} eingeplant. Status im Event ändern.`); return; }
+  if(!(p.roles||[]).length && ROLES[pq.role]){ p.roles=[pq.role]; put('persons',p); }
   const a = put('assignments',{id:uid(), eventId:ev.id, dayId:day.id, personId:p.id, role:pq.role, shiftId:pq.shiftId||'', planStart:pq.planStart, planEnd:pq.planEnd, status:'angefragt'});
   persist(); pqClose(); if(view==='pEvent' && pEventId===ev.id) pDayId=day.id; render();
-  toast(`${p.name} · ${ROLE_SHORT[a.role]} · ${ev.name}: angefragt`, {label:'Rückgängig', fn:()=>{ del('assignments',a.id); persist(); render(); toast('Einsatz entfernt'); }});
+  toast(`${p.name} · ${roleName(ev,a.role)} · ${ev.name}: angefragt`, {label:'Rückgängig', fn:()=>{ del('assignments',a.id); persist(); render(); toast('Einsatz entfernt'); }});
 }
 
 /* Startseite und Bereiche: Lager (alles bisherige) und Personal */
@@ -1886,21 +1916,25 @@ document.addEventListener('click', async e=>{
     case 'pqDay': pq.dayId=id; pqTimes(); if(pq.personId) pq.role=pq.role||pqDefaultRole(); renderPQ(); break;
     case 'pqPickP': pq.personId=id; if(!pq.role){ pq.role=pqDefaultRole(); pqTimes(); } renderPQ(); break;
     case 'pqChangeP': pq.personId=''; renderPQ(); $('#pq-q')?.focus(); break;
-    case 'pqNewP': { const nm=pq.q.trim(); const p=put('persons',{id:uid(), name:nm, phone:'', roles:pq.role?[pq.role]:[], payType:'hour', rate:0, note:''}); persist();
+    case 'pqNewP': { const nm=pq.q.trim(); const p=put('persons',{id:uid(), name:nm, phone:'', roles:ROLES[pq.role]?[pq.role]:[], payType:'hour', rate:0, note:''}); persist();
       pq.personId=p.id; if(!pq.role) pq.role=pqDefaultRole(); renderPQ(); toast(`„${nm}“ angelegt. Telefon und Rollen unter Personen ergänzen.`); break; }
     case 'pqRole': pq.role=el.dataset.r; pqTimes(); renderPQ(); break;
     case 'pqShift': pq.shiftId=id||''; pqTimes(); renderPQ(); break;
     case 'pqBook': pqBook(); break;
     case 'pOpenEvent': pEventId=id; pDayId=null; pEditEvent=false; view='pEvent'; render(); window.scrollTo(0,0); break;
-    case 'pAddEvent': pAddEvent=true; render(); $('#pe-name')?.focus(); break;
-    case 'pCancelEvent': pAddEvent=false; render(); break;
-    case 'pEditEvent': pEditEvent=!pEditEvent; render(); break;
+    case 'pAddEvent': pAddEvent=true; peRoles=null; render(); $('#pe-name')?.focus(); break;
+    case 'pCancelEvent': pAddEvent=false; peRoles=null; render(); break;
+    case 'pEditEvent': pEditEvent=!pEditEvent; peRoles=null; render(); break;
+    case 'peAddCat': { peReadCats(); const nid = id || 'k'+uid().replace(/-/g,'').slice(0,10); peRoles.push({id:nid, name:id?ROLES[id]:''}); peRefresh();
+      if(!id) document.querySelector(`#pe-cats .pc-name[data-id="${nid}"]`)?.focus(); break; }
+    case 'peDelCat': { const ev=PS.events[$('#pEventForm').dataset.id];
+      if(ev && asgOf(ev.id).some(a=>a.role===id)){ toast('In dieser Kategorie sind noch Personen eingeplant. Erst dort entfernen.'); return; }
+      peReadCats(); peRoles=peRoles.filter(r=>r.id!==id); peRefresh(); break; }
     case 'pPastToggle': pPastOpen=!pPastOpen; render(); break;
     case 'pDelEvent': del('events',id); asgOf(id).forEach(a=>del('assignments',a.id)); persist(); pEditEvent=false; view='personal'; render(); toast('Event gelöscht'); break;
     case 'pAddShift': { const ev=PS.events[pEventId]; ev.shifts=(ev.shifts||[]).concat({id:uid(), label:'', start:ev.start||'', end:ev.end||''}); put('events',ev); persist(); render(); break; }
     case 'pDelShift': { const ev=PS.events[pEventId]; ev.shifts=(ev.shifts||[]).filter(x=>x.id!==id); put('events',ev);
       asgOf(ev.id).filter(a=>a.shiftId===id).forEach(a=>{ a.shiftId=''; put('assignments',a); }); persist(); render(); break; }
-    case 'pSetStatus': { const a=PS.assignments[id]; if(a.status===el.dataset.s) break; a.status=el.dataset.s; put('assignments',a); persist(); render(); break; }
     case 'pDay': pDayId=id; render(); break;
     case 'pTile': pTile = pTile===el.dataset.r ? null : el.dataset.r; render(); break;
     case 'peCopyDay1': { const f=[...document.querySelectorAll('#pe-days .pday')]; const src=f[0];
@@ -1993,6 +2027,7 @@ document.addEventListener('input', e=>{
       if(b&&a){ const st=stockMap(); b.innerHTML=`${QB.dir<0?'−':'+'} ${fmt(QB.qty)} ${esc(a.unit)} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt((st[a.id]||0)+QB.dir*QB.qty)}</span>`; } return; }
     if(t.id==='qb-note'){ QB.note=t.value; return; }
   }
+  if(t.classList.contains('pc-name')){ document.querySelectorAll(`#pe-days .prole[data-r="${t.dataset.id}"] .prole-n`).forEach(n=>n.textContent=t.value||'…'); return; }
   if(pq){
     if(t.id==='pq-q'){ pq.q=t.value; $('#pq-list').innerHTML=pqPersonList(); return; }
     if(t.id==='pq-start'){ pq.planStart=t.value; return; }
