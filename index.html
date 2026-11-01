@@ -13,6 +13,11 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#17684f">
+<script>
+// Direkt aus dem Dropbox-Ordner geöffnet (file://): dort hätte die App einen eigenen, getrennten Speicher
+// und keinen Offline-Betrieb, also zur Online-Version weiterleiten. Ohne Netz übernimmt deren Offline-Speicher.
+if (location.protocol === 'file:') location.replace('https://bundb-app.github.io/App/' + location.hash);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
@@ -1290,7 +1295,7 @@ function vAnleitung(){
         <li><b>Safari:</b> Menü <b>Ablage › Zum Dock hinzufügen</b>.</li>
         <li><b>Chrome:</b> rechts in der Adressleiste auf das <b>Installieren-Symbol</b> klicken (Bildschirm mit Pfeil) oder Menü <b>⋮ › Streamen, speichern und teilen › Seite als App installieren …</b> Die App liegt danach unter Programme › Chrome-Apps; ins Dock per Rechtsklick › Optionen › Im Dock behalten.</li>
       </ul>
-      <p class="small muted" style="margin:0">Die Datei <code>index.html</code> im Dropbox-Ordner nicht direkt öffnen: Sie hat einen eigenen, getrennten Speicher und läuft nicht offline.</p></div>
+      <p class="small muted" style="margin:0">Die Datei <code>index.html</code> im Dropbox-Ordner ist nur eine Sicherungskopie. Öffnet man sie, leitet sie auf die Online-Version weiter.</p></div>
   </div>`;
 }
 

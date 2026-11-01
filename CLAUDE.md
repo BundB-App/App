@@ -70,7 +70,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
   - `Eingang/_Neu`, `Ausgang/_Neu` – Posteingang; die App liest dort beim Start und bei Rückkehr in den Vordergrund automatisch ein
   - `Eingang/<Jahr>`, `Ausgang/<Jahr>` – Archiv nach dem Buchen (nur Ablage, für den Bestand nicht nötig)
   - `Inventur/` – CSV-Protokolle der Inventuren
-  - `App/` – Kopie der App-Dateien, wird bei jedem Release mitgespiegelt (maßgeblich ist das Repository)
+  - `App/` – Kopie der App-Dateien, wird bei jedem Release mitgespiegelt (maßgeblich ist das Repository); per Doppelklick geöffnet (`file://`) leitet `index.html` auf die Online-Version weiter
   - `Vorlage_Lagerbestand.xlsx` – Vorlage für den Bestandsimport
 - Dropbox-App: „Scoped access“, „Full Dropbox“, Rechte `files.metadata.read`, `files.content.read`, `files.content.write`. App key steht fest im Code (`APP_KEY` in `index.html`, nicht geheim, PKCE ohne App secret); Geräte tippen nur „Verbinden“. Unter Einstellungen → Erweitert lässt er sich überschreiben. „Enable additional users“ ist für Mitarbeiter nötig.
 
