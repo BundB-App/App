@@ -134,7 +134,11 @@ body[data-area="home"] .sync, body[data-area="personal"] .sync{margin-left:auto}
 th{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-top:0}
 td.r,th.r{text-align:right}
 pre.raw{white-space:pre-wrap;font:12px/1.45 var(--f-mono);background:var(--sunk);padding:10px;border-radius:8px;max-height:280px;overflow:auto}
-ol.steps{padding-left:20px;margin:0;display:grid;gap:6px}
+ol.steps,ul.steps{padding-left:20px;margin:0;display:grid;gap:6px}
+.guide-link{display:flex;align-items:center;justify-content:space-between;gap:12px;color:inherit;text-decoration:none}
+.guide-link>span[aria-hidden]{font:700 26px/1 var(--f-display);color:var(--muted)}
+.guide-step{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+.guide-num{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 18px/1 var(--f-display)}
 code{font:13px var(--f-mono);background:var(--sunk);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:9px;font-weight:500;z-index:20;max-width:calc(100% - 32px)}
 
@@ -429,7 +433,9 @@ function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){
 function emptyState(){ return {articles:{},movements:{},docs:{},rules:{},meta:{v:1}}; }
 let S = Object.assign(emptyState(), lsGet(LS_DATA)||{});
 COLLS.forEach(c=>{ if(!S[c]) S[c]={}; });
-let CFG = Object.assign({appKey:'', base:'/BundB App', ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
+/* Standardordner. Früher lag der Ordner direkt in der Dropbox; die App findet beide Orte selbst (findBase). */
+const BASE_DEFAULT='/Apps/BundB App', BASE_KNOWN=['/Apps/BundB App','/BundB App'];
+let CFG = Object.assign({appKey:'', base:BASE_DEFAULT, ownName:'B&B', refresh:'', access:'', accessExp:0, verifier:'', lastSync:0, autoBook:false}, lsGet(LS_CFG)||{});
 
 function put(coll, obj){ obj.updatedAt = now(); S[coll][obj.id]=obj; return obj; }
 function del(coll, id){ const o=S[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); } }
@@ -525,7 +531,8 @@ async function sync(){
   syncing=true; setSync('busy');
   try{
     const before = JSON.stringify(S);
-    const blob = await DBX.download(P('lager.json'));
+    let blob = await DBX.download(P('lager.json'));
+    if(!blob && !CFG.allowNew) blob = await findBase();
     let resetAt = (S.meta&&S.meta.resetAt)||0;
     if(blob){
       const remote = JSON.parse(await blob.text());
@@ -536,7 +543,7 @@ async function sync(){
       S = merge(S, remote);
     }
     else if(CFG.lastSync && !CFG.allowNew){
-      throw new Error(`lager.json wurde in „${CFG.base}“ nicht gefunden. Wurde der Ordner umbenannt oder verschoben? Bitte unter Einstellungen den Ordner anpassen.`);
+      throw new Error(`lager.json wurde weder in „${CFG.base}“ noch in „${BASE_KNOWN.join('“ / „')}“ gefunden. Wurde der Ordner umbenannt oder verschoben? Bitte unter Einstellungen den Ordner anpassen.`);
     }
     CFG.allowNew=false;
     S.meta = {v:1, savedAt:now(), by:navigator.platform||'', resetAt};
@@ -546,6 +553,21 @@ async function sync(){
   }catch(e){ setSync('err', e.message); }
   syncing=false;
   if(syncAgain){ syncAgain=false; sync(); }
+}
+
+/* Ordner verschoben (z. B. von „BundB App“ nach „Apps/BundB App“): an den bekannten Orten nach lager.json suchen
+   und den Ordner auf diesem Gerät umstellen. Liefert die gefundene lager.json oder null. */
+async function findBase(){
+  for(const b of BASE_KNOWN){
+    if(b.toLowerCase()===CFG.base.toLowerCase()) continue;
+    const blob = await DBX.download((b+'/lager.json').replace(/\/+/g,'/'));
+    if(blob){
+      const old=CFG.base; CFG.base=b; saveCfg(); QUEUE=[]; inboxCache={in:null,out:null,err:''};
+      toast(`Ordner gefunden: „${b.replace(/^\//,'')}“ (vorher „${old.replace(/^\//,'')}“). Auf diesem Gerät umgestellt.`);
+      return blob;
+    }
+  }
+  return null;
 }
 
 /* ===================== Hilfen UI ===================== */
@@ -1134,11 +1156,12 @@ function vSetup(){
   const connected = DBX.connected;
   return `<div class="stack">
     <div><div class="eyebrow">Sync &amp; Daten</div><h1>Einstellungen</h1></div>
+    <a class="panel guide-link" href="#" data-go="anleitung"><span><b>Anleitung: App auf iPhone und Mac einrichten</b><br><span class="small muted">Installieren, mit Dropbox verbinden, Mitarbeiter einrichten</span></span><span aria-hidden="true">›</span></a>
     <div class="panel stack">
       <div class="row spread"><h2>Dropbox</h2>${connected?'<span class="pill ok">verbunden</span>':'<span class="pill">nicht verbunden</span>'}</div>
       ${connected ? `
         <div class="row" style="gap:8px"><span class="small muted">App key</span><code id="appkey">${esc(CFG.appKey)}</code><button class="btn sm" data-act="copyKey">Kopieren</button></div>
-        <div class="row" style="align-items:end"><label class="f" style="flex:1 1 220px">Ordner in der Dropbox<input id="cfg-base2" value="${esc(CFG.base)}" spellcheck="false"></label>
+        <div class="row" style="align-items:end"><label class="f" style="flex:1 1 220px">Ordner in der Dropbox<input id="cfg-base2" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
           <button class="btn" data-act="saveBase">Ordner übernehmen</button></div>
         <p style="margin:0">Daten liegen in <code>${esc(P('lager.json'))}</code>. ${CFG.lastSync?'Zuletzt synchronisiert: '+new Date(CFG.lastSync).toLocaleString('de-DE'):''}</p>
         ${syncState.s==='err'?`<div class="note">${esc(syncState.msg)}</div>`:''}
@@ -1146,19 +1169,21 @@ function vSetup(){
           <button class="btn danger" data-act="disconnect" data-confirm="Wirklich trennen?">Trennen</button></div>`
       : `
         <ol class="steps small">
-          <li>Auf <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">dropbox.com/developers/apps</a> „Create app“ wählen: <b>Scoped access</b>, <b>Full Dropbox</b>, beliebiger Name.</li>
-          <li>Im Tab <b>Permissions</b> anhaken: <code>files.metadata.read</code>, <code>files.content.read</code>, <code>files.content.write</code>. Dann „Submit“.</li>
-          <li>Im Tab <b>Settings</b> den <b>App key</b> kopieren und hier eintragen.</li>
-          <li>„Verbinden“, in Dropbox erlauben, den angezeigten Code hier einfügen. Auf jedem Gerät (Mac, iPhone) einmal.</li>
+          <li><b>App key</b> eintragen (bekommst du von Thomas, oder unter Einstellungen auf einem schon verbundenen Gerät kopieren).</li>
+          <li><b>Ordner</b> so lassen: <code>${esc(BASE_DEFAULT.replace(/^\//,''))}</code>. Liegt der Ordner bei dir woanders (z. B. direkt als <code>BundB App</code>), findet die App ihn beim ersten Sync selbst.</li>
+          <li><b>Verbinden</b> tippen, dann <b>Dropbox-Freigabe öffnen</b>. Bei Dropbox anmelden, bei der Warnung <b>Weiter</b>, dann <b>Zulassen</b>.</li>
+          <li>Den angezeigten <b>Code</b> kopieren, zurück in diese App wechseln, unten einfügen und <b>Code bestätigen</b>.</li>
         </ol>
+        <p class="small muted" style="margin:0">Ausführlich mit Bildschirm-Schritten: <a href="#" data-go="anleitung">Anleitung</a>. Einmal pro Gerät (iPhone, Mac) nötig.</p>
         <div class="grid">
           <label class="f">App key<input id="cfg-key" value="${esc(CFG.appKey)}" autocomplete="off" spellcheck="false"></label>
-          <label class="f">Ordner in der Dropbox<input id="cfg-base" value="${esc(CFG.base)}" spellcheck="false"></label>
+          <label class="f">Ordner in der Dropbox<input id="cfg-base" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
         </div>
         <div class="row"><button class="btn primary" data-act="auth">Verbinden</button></div>
         <div id="authStep" hidden class="stack">
           <a class="btn" id="authLink" href="#" target="_blank" rel="noopener">Dropbox-Freigabe öffnen ↗</a>
           <div class="row"><input id="authCode" placeholder="Code aus Dropbox einfügen" style="flex:1 1 220px" autocomplete="off"><button class="btn primary" data-act="authCode">Code bestätigen</button></div>
+          <p class="small muted" style="margin:0">Der Code gilt nur wenige Minuten und nur einmal. Bei einer Fehlermeldung einfach erneut auf „Verbinden“ tippen.</p>
         </div>`}
     </div>
     <div class="panel stack"><h2>App weitergeben</h2>
@@ -1170,10 +1195,10 @@ function vSetup(){
       </div>
       <div><div class="eyebrow" style="margin-bottom:6px">Neuen Mitarbeiter einrichten</div>
       <ol class="steps small">
-        <li>Dropbox-Ordner <code>${esc(CFG.base.replace(/^\//,''))}</code> mit ihm teilen, Recht „Kann bearbeiten“.</li>
+        <li>Dropbox-Ordner <code>${esc(CFG.base.replace(/^\//,''))}</code> mit der Person teilen, Recht „Kann bearbeiten“. Bei ihr erscheint er als <code>BundB App</code>; sie kann ihn ebenfalls nach <code>Apps</code> verschieben, muss aber nicht.</li>
         <li>Einmalig in der Dropbox-App (dropbox.com/developers/apps → Einstellungen) „Enable additional users“ aktivieren.</li>
-        <li>Er öffnet die App-Adresse, auf dem iPhone in Safari → „Zum Home-Bildschirm“.</li>
-        <li>Einstellungen in der App: App key eintragen, Ordner eintragen (meist <code>${esc(CFG.base)}</code>), „Verbinden“ und mit seinem eigenen Dropbox-Konto anmelden.</li>
+        <li>Die Person öffnet die App-Adresse, auf dem iPhone in Safari → „Zum Home-Bildschirm“ (siehe <a href="#" data-go="anleitung">Anleitung</a>).</li>
+        <li>In der App unter Einstellungen den App key eintragen, Ordner so lassen, „Verbinden“ und mit dem eigenen Dropbox-Konto anmelden.</li>
       </ol></div>
     </div>
     <div class="panel stack"><h2>Allgemein</h2>
@@ -1198,6 +1223,64 @@ function vSetup(){
         <button class="btn danger" data-act="wipe" data-confirm="Alle Daten auf diesem Gerät löschen?">Lokale Daten löschen</button></div>
       <p class="small muted" style="margin:0">„Lokale Daten löschen“ entfernt nur die Kopie auf diesem Gerät. Bei verbundener Dropbox kommen die Daten beim nächsten Sync zurück.</p>
     </div>
+  </div>`;
+}
+
+/* Anleitung zum Einrichten auf iPhone und Mac (unter Einstellungen) */
+function vAnleitung(){
+  const ext = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+  const step = (n, title, body) => `<div class="panel guide-step"><div class="guide-num">${n}</div><div class="stack" style="gap:8px"><h3>${title}</h3>${body}</div></div>`;
+  const folder = esc(CFG.base.replace(/^\//,'').replace(/\//g,' › '));
+  return `<div class="stack">
+    <div><a href="#" data-go="setup" class="small">‹ Einstellungen</a></div>
+    <div><div class="eyebrow">Anleitung</div><h1>App auf iPhone und Mac einrichten</h1>
+      <p class="muted" style="margin:6px 0 0">Einmalig ca. 5 Minuten pro Gerät. Danach startet B&amp;B wie eine normale App vom Home-Bildschirm.</p></div>
+    <div class="panel stack" style="gap:8px"><h3>Das brauchst du</h3>
+      <ul class="steps">
+        <li>Ein iPhone mit aktuellem iOS und <b>Safari</b>. Andere Browser können keine Apps zum Home-Bildschirm hinzufügen.</li>
+        <li>Ein <b>Dropbox-Konto</b>, in dem der Ordner <b>${folder}</b> liegt (eigener Ordner oder mit dir geteilt).</li>
+        <li>Den <b>App key</b> (von Thomas, oder auf einem verbundenen Gerät unter Einstellungen → Kopieren).</li>
+        <li>Optional die ${ext('https://apps.apple.com/app/dropbox/id327630330','Dropbox-App aus dem App Store')}, damit die Anmeldung schneller geht.</li>
+      </ul></div>
+    ${step(1,'B&amp;B in Safari öffnen',`
+      <p style="margin:0">Auf dem iPhone in <b>Safari</b> diese Adresse öffnen:</p>
+      <div class="row" style="gap:8px"><code id="guideurl">${esc(APP_URL)}</code><button class="btn sm" data-act="copyText" data-target="guideurl">Kopieren</button>
+        ${navigator.share?'<button class="btn sm" data-act="shareUrl">Link senden …</button>':''}</div>
+      <p class="small muted" style="margin:0">Tipp: Am Mac mit „Link senden …“ per AirDrop oder Nachricht direkt aufs iPhone schicken.</p>`)}
+    ${step(2,'Zum Home-Bildschirm hinzufügen',`
+      <ol class="steps">
+        <li>Unten in Safari auf das <b>Teilen-Symbol</b> tippen (Quadrat mit Pfeil nach oben). Bei manchen iOS-Versionen erst auf <b>•••</b> tippen.</li>
+        <li>Nach unten scrollen und <b>Zum Home-Bildschirm</b> wählen.</li>
+        <li>Prüfen, dass <b>Als Web-App öffnen</b> eingeschaltet ist (falls angezeigt), dann <b>Hinzufügen</b> tippen.</li>
+      </ol>
+      <p class="small muted" style="margin:0">Auf dem Home-Bildschirm erscheint jetzt das Symbol „B&amp;B Lager“.</p>`)}
+    ${step(3,'App vom Home-Bildschirm starten',`
+      <p style="margin:0">Ab jetzt die App <b>immer über das Symbol</b> öffnen, nicht über den Safari-Tab. Die installierte App hat ihren eigenen Speicher und ihre eigene Dropbox-Verbindung.</p>`)}
+    ${step(4,'Mit Dropbox verbinden',`
+      <ol class="steps">
+        <li>In der App <b>Lager</b> öffnen, unten auf <b>Einstellungen</b> tippen.</li>
+        <li><b>App key</b> einfügen. Den <b>Ordner</b> so lassen (<code>${esc(BASE_DEFAULT.replace(/^\//,''))}</code>).</li>
+        <li><b>Verbinden</b> tippen, dann <b>Dropbox-Freigabe öffnen</b>. Es öffnet sich die Dropbox-Anmeldung.</li>
+        <li>Bei Dropbox anmelden. Bei der Warnung „Bevor Sie diese App verknüpfen …“ auf <b>Weiter</b> tippen.</li>
+        <li>Auf <b>Zulassen</b> tippen. Dropbox zeigt einen <b>Zugriffscode</b>. Den Code kopieren (lange drücken → Kopieren).</li>
+        <li>Das Dropbox-Fenster schließen (<b>Fertig</b> oben links) bzw. zurück zur B&amp;B-App wechseln.</li>
+        <li>Den Code in das Feld <b>Code aus Dropbox einfügen</b> einsetzen und <b>Code bestätigen</b> tippen.</li>
+      </ol>
+      <p class="small muted" style="margin:0">Der Code gilt nur wenige Minuten und nur einmal. Bei einer Fehlermeldung einfach nochmal bei „Verbinden“ beginnen.</p>`)}
+    ${step(5,'Fertig, kurz prüfen',`
+      <p style="margin:0">Oben rechts steht jetzt <span class="pill ok">Synchron</span>. Bestand und Buchungen der anderen Geräte erscheinen nach wenigen Sekunden.</p>
+      <p class="small muted" style="margin:0">Die Daten liegen als <code>lager.json</code> im Ordner <b>Dropbox › ${folder}</b>. Neue Rechnungen kommen nach <b>Eingang › _Neu</b> bzw. <b>Ausgang › _Neu</b>.</p>`)}
+    <div class="panel stack" style="gap:8px"><h3>Gut zu wissen</h3>
+      <ul class="steps">
+        <li><b>Offline:</b> Buchungen gehen auch ohne Netz. Oben steht dann „Offline“. Sobald wieder Netz da ist, wird automatisch synchronisiert.</li>
+        <li><b>Updates:</b> Neue Versionen kommen beim nächsten Öffnen mit Netz. Wirkt etwas veraltet, die App ganz schließen (vom unteren Rand hochwischen, App nach oben wegwischen) und neu öffnen.</li>
+        <li><b>Ordner verschoben:</b> Liegt der Ordner als <code>Apps/BundB App</code> oder direkt als <code>BundB App</code> in der Dropbox, stellt sich die App selbst um. Bei einem anderen Ort unter Einstellungen den Ordner eintragen und „Ordner übernehmen“ tippen.</li>
+        <li><b>Sync-Fehler:</b> Auf die Statusanzeige oben rechts tippen. Hilft das nicht, unter Einstellungen <b>Trennen</b> und Schritt 4–5 wiederholen.</li>
+        <li><b>Mitarbeiter:</b> Alle, mit denen der Ordner geteilt ist, arbeiten auf denselben Daten. Jede Person verbindet die App mit ihrem eigenen Dropbox-Konto.</li>
+        <li><b>Zugriff entziehen:</b> Jederzeit unter ${ext('https://www.dropbox.com/account/connected_apps','Dropbox › Verknüpfte Apps')} möglich.</li>
+      </ul></div>
+    <div class="panel stack" style="gap:8px"><h3>Und am Mac?</h3>
+      <p style="margin:0">${ext(APP_URL,'Die App-Adresse')} in Safari oder Chrome öffnen und Schritt 4–5 genauso machen. In Safari lässt sich die App über <b>Ablage › Zum Dock hinzufügen</b> als eigene App ins Dock legen.</p></div>
   </div>`;
 }
 
@@ -1230,12 +1313,13 @@ function vPersonal(){
   </div>`;
 }
 
-const VIEWS = {home:vHome, personal:vPersonal, bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
+const VIEWS = {home:vHome, personal:vPersonal, anleitung:vAnleitung, bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
 function render(){
   const area = areaOf(view);
   document.body.dataset.area = area;
   $('#areaName').textContent = AREA_NAME[area];
-  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===view?'page':'false'));
+  const tab = view==='anleitung' ? 'setup' : view;
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
   if(view==='belege' && !IMP && !busyMsg) bindDrop();
@@ -1270,6 +1354,7 @@ document.addEventListener('click', async e=>{
     case 'qbStep': QB.qty=Math.max(0,(Number(QB.qty)||0)+Number(el.dataset.step)); renderQB(); break;
     case 'qbReason': QB.reason=el.dataset.r; renderQB(); break;
     case 'qbBook': qbBook(); break;
+    case 'shareUrl': navigator.share({title:'B&B Lager', url:APP_URL}).catch(()=>{}); break;
     case 'copyText': { const n=$('#'+el.dataset.target); const txt=n.textContent;
       const fallback=()=>{ const r=document.createRange(); r.selectNodeContents(n); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); };
       if(navigator.clipboard) navigator.clipboard.writeText(txt).then(()=>toast('Kopiert'), fallback); else fallback(); break; }
