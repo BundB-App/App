@@ -298,7 +298,6 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   .mv{grid-template-columns:72px minmax(0,1fr) auto}
   h1{font-size:28px}
 }
-.dur-out{display:flex;align-items:center;min-height:40px;padding:0 2px;font-variant-numeric:tabular-nums;font-weight:600}
 </style>
 </head>
 <body>
@@ -1556,12 +1555,6 @@ const tSpan = (a,b) => a&&b ? `${a}–${b}` : (a||b||'');
 const mins = t => { const m=/^(\d{1,2}):(\d{2})/.exec(t||''); return m ? Number(m[1])*60+Number(m[2]) : null; };
 /* Dauer in Minuten, über Mitternacht gerechnet (z. B. 18:00–02:00) */
 function dur(a,b){ const x=mins(a), y=mins(b); return x==null||y==null ? null : (y-x+1440)%1440; }
-/* Dauer in Stunden für das Feld neben Beginn/Ende, z. B. „8,5 h“ */
-function durH(a,b){ const d=dur(a,b); return d==null ? '–' : fmt(d/60)+' h'; }
-function durField(a,b){ return `<label class="f">Dauer<output class="dur-out">${durH(a,b)}</output></label>`; }
-/* Dauer neu berechnen, sobald in einem Beginn/Ende-Paar getippt wird */
-function updDur(t){ if(!t.matches || !t.matches('[data-dur]')) return; const g=t.closest('.grid'), o=g&&g.querySelector('.dur-out'); if(!o) return;
-  const [a,b]=[...g.querySelectorAll('[data-dur]')].map(i=>normTime(i.value)||''); o.textContent=durH(a,b); }
 const hm = m => `${Math.floor(Math.abs(m)/60)}:${String(Math.abs(m)%60).padStart(2,'0')}`;
 const hmSigned = m => (m>0?'+':m<0?'−':'±')+hm(m);
 function addDays(s, n){ const [y,m,d]=s.split('-').map(Number); const x=new Date(y,m-1,d+n);
@@ -1807,9 +1800,8 @@ function asgHtml(a, ev, day){
           ${days.length>1?`<label class="f">Tag<select data-pa="dayId" data-id="${a.id}">${days.map(d=>`<option value="${d.id}" ${day.id===d.id?'selected':''}>${dWD(d.date)}</option>`).join('')}</select></label>`:''}
           <label class="f">Kategorie<select data-pa="role" data-id="${a.id}">${rolesOf(ev).filter(x=>x.id===a.role || rolesOfDay(ev,day).includes(x)).map(({id:r,name:l})=>`<option value="${r}" ${a.role===r?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
           ${shifts.length?`<label class="f">Schicht<select data-pa="shiftId" data-id="${a.id}"><option value="">ganzer Tag</option>${shifts.map(s=>`<option value="${s.id}" ${a.shiftId===s.id?'selected':''}>${esc(s.label||'Schicht')} ${tSpan(s.start,s.end)}</option>`).join('')}</select></label>`:''}
-          <label class="f">Plan Beginn<input type="time" data-dur data-pa="planStart" data-id="${a.id}" value="${esc(a.planStart||'')}"></label>
-          <label class="f">Plan Ende<input type="time" data-dur data-pa="planEnd" data-id="${a.id}" value="${esc(a.planEnd||'')}"></label>
-          ${durField(a.planStart,a.planEnd)}
+          <label class="f">Plan Beginn<input type="time" data-pa="planStart" data-id="${a.id}" value="${esc(a.planStart||'')}"></label>
+          <label class="f">Plan Ende<input type="time" data-pa="planEnd" data-id="${a.id}" value="${esc(a.planEnd||'')}"></label>
         </div>
         <button class="btn sm danger" data-act="pDelAsg" data-id="${a.id}" data-confirm="Wirklich entfernen?" style="margin-top:8px">Einsatz entfernen</button>
       </details>
@@ -1829,7 +1821,7 @@ function vPEvent(){
   const s = dayState(ev, day);
   const shifts = ev.shifts||[];
   const dayLine = `${dWD(day.date)}${day.start?' · '+tSpan(day.start,day.end)+' Uhr':''}${d!=null&&day.end?' · '+hm(d)+' Std.':''}`;
-  const rtxt = r => { const t=roleTime(day,r); return t.start||t.end ? tSpan(t.start,t.end)+' Uhr' : ''; };
+  const rtxt = (r, withDur) => { const t=roleTime(day,r), d=dur(t.start,t.end); return t.start||t.end ? tSpan(t.start,t.end)+' Uhr'+(withDur&&d!=null?' · '+fmt(d/60)+' h':'') : ''; };
   const tile = roles.includes(pTile) ? pTile : null;
   const okList = tile ? as.filter(a=>a.role===tile && a.status==='bestaetigt').sort((a,b)=>personName(a.personId).localeCompare(personName(b.personId))) : [];
   return `<div class="stack">
@@ -1867,7 +1859,7 @@ function vPEvent(){
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten. Eintragen: Kachel der Kategorie oben antippen.</div>` : ''}
     <div class="row spread plan-h"><h2>Einplanen</h2><button class="btn sm primary" data-act="pqOpen" data-id="${ev.id}">+ Person</button></div>
     ${roles.map(r=>{ const list=as.filter(a=>a.role===r).sort((a,b)=>order[a.status]-order[b.status]||personName(a.personId).localeCompare(personName(b.personId)));
-      return `<div class="list"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))} <span class="asg-date">· ${dShort(day.date)}</span></h3>${rtxt(r)?`<span class="small muted">${rtxt(r)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
+      return `<div class="list"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))} <span class="asg-date">· ${dShort(day.date)}</span></h3>${rtxt(r)?`<span class="small muted">${rtxt(r,true)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
         ${list.length ? list.map(a=>asgHtml(a,ev,day)).join('') : '<div class="asg small muted">Noch niemand eingeplant.</div>'}</div>`; }).join('')}
   </div>`;
 }
@@ -2103,7 +2095,7 @@ function renderPQ(){
       <div class="chips" role="group" aria-label="Kategorie">${rolesOfDay(ev, day).map(({id:r,name:l})=>`<button data-act="pqRole" data-r="${r}" aria-pressed="${pq.role===r}">${esc(l)}</button>`).join('')}</div>
       <div class="eyebrow">Geplante Zeit${days.length>1?' · '+esc(dayName(day,days.indexOf(day)))+', '+dShort(day.date):''}${pq.role?' · '+esc(roleName(ev,pq.role)):''}</div>
       ${shifts.length ? `<div class="chips" role="group" aria-label="Schicht"><button data-act="pqShift" data-id="" aria-pressed="${!pq.shiftId}">ganzer Tag</button>${shifts.map(s=>`<button data-act="pqShift" data-id="${s.id}" aria-pressed="${pq.shiftId===s.id}">${esc(s.label||'Schicht')} ${tSpan(s.start,s.end)}</button>`).join('')}</div>` : ''}
-      <div class="grid" style="grid-template-columns:1fr 1fr 1fr"><label class="f">Beginn<input id="pq-start" type="time" data-dur value="${esc(pq.planStart)}"></label><label class="f">Ende<input id="pq-end" type="time" data-dur value="${esc(pq.planEnd)}"></label>${durField(pq.planStart,pq.planEnd)}</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">Beginn<input id="pq-start" type="time" value="${esc(pq.planStart)}"></label><label class="f">Ende<input id="pq-end" type="time" value="${esc(pq.planEnd)}"></label></div>
       <button class="btn primary" data-act="pqBook" style="justify-content:center;min-height:48px;font-size:16px" ${ready?'':'disabled'}>${ready?'Als „angefragt“ eintragen':!p?'Erst Person wählen':'Erst Kategorie wählen'}</button>` : ''}
   </div></div>`;
 }
@@ -2358,7 +2350,6 @@ document.addEventListener('click', async e=>{
 
 document.addEventListener('input', e=>{
   const t=e.target;
-  updDur(t);
   if(QB){
     if(t.id==='qb-q'){ QB.q=t.value; $('#qb-list').innerHTML=qbListHtml(); return; }
     if(t.id==='qb-qty'){ QB.qty=parseNum(t.value); if(isNaN(QB.qty)) QB.qty=0; const b=document.querySelector('[data-act=qbBook]'); const a=S.articles[QB.articleId];
@@ -2388,7 +2379,6 @@ document.addEventListener('input', e=>{
 });
 document.addEventListener('change', e=>{
   const t=e.target;
-  updDur(t);
   if(t.dataset.xl!==undefined && XL){ XL.rows[+t.dataset.xl].on=t.checked; render(); return; }
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
