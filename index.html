@@ -17,6 +17,8 @@
 // Direkt aus dem Dropbox-Ordner geöffnet (file://): dort hätte die App einen eigenen, getrennten Speicher
 // und keinen Offline-Betrieb, also zur Online-Version weiterleiten. Ohne Netz übernimmt deren Offline-Speicher.
 if (location.protocol === 'file:') location.replace('https://bundb-app.github.io/App/' + location.hash);
+// Darstellung (Hell/Dunkel) pro Gerät vor dem ersten Zeichnen setzen, damit nichts aufblitzt
+try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').theme; if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -229,6 +231,8 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .chips button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .seg.big{display:grid;grid-template-columns:1fr 1fr;width:100%}
 .seg.big button{padding:10px;font-size:15px}
+.seg.big3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.seg.big3 button{padding:10px 4px;font-size:15px}
 .seg.big button[data-qdir="-1"][aria-pressed="true"]{color:var(--bad)}
 .seg.big button[data-qdir="1"][aria-pressed="true"]{color:var(--good)}
 .toast button{margin-left:12px;background:none;border:0;color:inherit;font:600 14px var(--f-body);text-decoration:underline;cursor:pointer}
@@ -1316,6 +1320,11 @@ function vSetup(){
         <li>In der App unter Einstellungen „Verbinden“ tippen und mit dem eigenen Dropbox-Konto anmelden. Mehr ist nicht nötig.</li>
       </ol></div>
     </div>
+    <div class="panel stack"><h2>Darstellung auf diesem Gerät</h2>
+      <div class="seg big3" role="group" aria-label="Darstellung">${[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(([k,l])=>
+        `<button data-act="theme" data-t="${k}" aria-pressed="${(CFG.theme||'auto')===k}">${l}</button>`).join('')}</div>
+      <p class="small muted" style="margin:0">Gilt nur für dieses Gerät, Rechner und Telefon lassen sich getrennt einstellen. „Automatisch“ folgt der Einstellung von iPhone bzw. Mac.</p>
+    </div>
     <div class="panel stack"><h2>Allgemein</h2>
       <div class="grid"><label class="f">Eigener Firmenname (wird beim Lesen von Rechnungen übersprungen)<input id="cfg-own" value="${esc(CFG.ownName)}"></label></div>
       <label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="cfg-auto" ${CFG.autoBook?'checked':''} style="margin-top:2px">
@@ -2018,6 +2027,9 @@ document.addEventListener('click', async e=>{
       try{ const e2 = await DBX.list(CFG.base); if(!e2.some(x=>x.name==='lager.json')){ toast(`In „${v}“ liegt keine lager.json. Ordnername prüfen.`); setSync('err','lager.json nicht gefunden'); render(); return; } }
       catch(err){ toast(err.message); return; }
       toast('Ordner übernommen'); render(); await sync(); scanInbox(false); break; }
+    case 'theme': { const t=el.dataset.t; CFG.theme = t==='auto' ? '' : t; saveCfg();
+      if(CFG.theme) document.documentElement.dataset.theme=CFG.theme; else delete document.documentElement.dataset.theme;
+      render(); break; }
     case 'copyKey': navigator.clipboard?.writeText(CFG.appKey).then(()=>toast('App key kopiert'),()=>{ const r=document.createRange(); r.selectNodeContents($('#appkey')); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); }); break;
     case 'sync': if(DBX.connected) sync(); else { view='setup'; render(); } break;
     case 'addArt': addingArt=true; render(); $('#na-name')?.focus(); break;
