@@ -155,8 +155,15 @@ button.stat.need b{font:700 24px/1.1 var(--f-display)}
 button.stat.need[aria-expanded="true"]{border-color:var(--accent);background:var(--accent-soft)}
 button.stat.need:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tile-more{position:absolute;right:10px;top:8px;color:var(--muted);font-size:12px}
+.tm{text-align:center;font-variant-numeric:tabular-nums}
 button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
 .tile-p{padding-top:10px;border-top:1px solid var(--line)}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font:500 14px var(--f-body);padding:5px 12px 5px 9px;margin-left:-2px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
+.back span{font:700 20px/1 var(--f-display);margin-top:-2px}
+.back:hover{color:var(--ink);border-color:var(--muted)}
+.ovw{display:grid;gap:10px;background:var(--accent-soft);border-radius:14px;padding:12px}
+.ovw .tile-list{box-shadow:0 1px 2px rgb(0 0 0 / .08)}
+.plan-h{margin-top:14px;padding-top:18px;border-top:2px solid var(--line)}
 .ist{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 64px;gap:8px;align-items:end}
 .ist .res{text-align:right}
 .asg-edit summary{list-style:none} .asg-edit summary::-webkit-details-marker{display:none}
@@ -1335,7 +1342,7 @@ function vAnleitung(){
   const step = (n, title, body) => `<div class="panel guide-step"><div class="guide-num">${n}</div><div class="stack" style="gap:8px"><h3>${title}</h3>${body}</div></div>`;
   const folder = esc(CFG.base.replace(/^\//,'').replace(/\//g,' › '));
   return `<div class="stack">
-    <div><a href="#" data-go="setup" class="small">‹ Einstellungen</a></div>
+    <div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div>
     <div><div class="eyebrow">Anleitung</div><h1>App auf iPhone und Mac einrichten</h1>
       <p class="muted" style="margin:6px 0 0">Einmalig ca. 5 Minuten pro Gerät. Danach startet B&amp;B wie eine normale App vom Home-Bildschirm.</p></div>
     <div class="panel stack" style="gap:8px"><h3>Das brauchst du</h3>
@@ -1664,7 +1671,7 @@ function vPEvent(){
   const tile = roles.includes(pTile) ? pTile : null;
   const okList = tile ? as.filter(a=>a.role===tile && a.status==='bestaetigt').sort((a,b)=>personName(a.personId).localeCompare(personName(b.personId))) : [];
   return `<div class="stack">
-    <div><a href="#" data-go="personal" class="small">‹ Events</a></div>
+    <div><a href="#" data-go="personal" class="back"><span aria-hidden="true">‹</span> Alle Events</a></div>
     <div class="row spread" style="align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0"><div class="eyebrow">${multi?evWhen(ev):dayLine}</div><h1>${esc(ev.name)}</h1></div>
       ${pEditEvent?'':'<button class="btn" data-act="pEditEvent">Bearbeiten</button>'}</div>
     ${pEditEvent ? eventFormHtml(ev) + `<div class="panel stack"><div class="row spread"><h3>Schichten <span class="small muted" style="font-family:var(--f-body);font-weight:400">optional, gelten für jeden Tag</span></h3>
@@ -1675,20 +1682,21 @@ function vPEvent(){
         : '<div class="small muted">Ohne Schichten gilt die Zeit der jeweiligen Kategorie.</div>'}</div>` : ''}
     ${multi ? `<div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div>
       <div><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dayLine}</h2></div>` : ''}
-    ${roles.length ? `<div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
+    ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span><span class="small muted">Kachel antippen: Bestätigte</span></div>
+      <div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
         const cls = !n ? (q ? 'warn' : '') : c+q<n ? 'bad' : q ? 'warn' : 'ok';
         return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span><span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
       ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId]; return `<div class="row spread tile-p" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
           <span class="small muted">${tSpan(a.planStart,a.planEnd)||'–'}${p&&p.phone?' · '+esc(p.phone):''}</span></span>
           <button class="btn sm" data-act="pWa" data-id="${a.id}">WhatsApp</button></div>`; }).join('')
-          : '<div class="small muted">Noch niemand bestätigt.</div>'}</div>` : ''}`
+          : '<div class="small muted">Noch niemand bestätigt.</div>'}</div>` : ''}</section>`
       : `<div class="panel small muted">Für ${multi?'diesen Tag':'dieses Event'} ist noch kein Bedarf eingetragen. Unter „Bearbeiten“ festlegen, wie viele Personen pro Kategorie gebraucht werden.</div>`}
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten.</div>` : ''}
+    <div class="row spread plan-h"><h2>Einplanen</h2><button class="btn sm primary" data-act="pqOpen" data-id="${ev.id}">+ Person</button></div>
     ${roles.map(r=>{ const list=as.filter(a=>a.role===r).sort((a,b)=>order[a.status]-order[b.status]||personName(a.personId).localeCompare(personName(b.personId)));
       return `<div class="list"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))}</h3>${rtxt(r)?`<span class="small muted">${rtxt(r)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
         ${list.length ? list.map(a=>asgHtml(a,ev,day)).join('') : '<div class="asg small muted">Noch niemand eingeplant.</div>'}</div>`; }).join('')}
-    <div class="row"><button class="btn primary" data-act="pqOpen" data-id="${ev.id}">+ Person einplanen</button></div>
   </div>`;
 }
 
@@ -1887,6 +1895,36 @@ function softRender(){
   const a=document.activeElement;
   if(IMP || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
   render();
+}
+
+/* Uhrzeiten am iPhone: statt Drehrad Zifferntastatur, „1430“ wird zu „14:30“, danach weiter zum nächsten Zeitfeld.
+   Am Rechner bleibt das normale Zeitfeld. */
+const TOUCH = matchMedia('(pointer: coarse)').matches;
+function normTime(v){
+  v = String(v||'').trim(); if(!v) return '';
+  let h, m; const c = v.match(/^(\d{1,2})\D+(\d{1,2})$/);
+  if(c){ h=c[1]; m=c[2].padEnd(2,'0'); }
+  else { const d=v.replace(/\D/g,''); if(!d || d.length>4) return null;
+    if(d.length<=2){ h=d; m='0'; } else if(d.length===3){ h=d[0]; m=d.slice(1); } else { h=d.slice(0,2); m=d.slice(2); } }
+  h=Number(h); m=Number(m); if(h===24 && m===0) h=0;
+  return h<=23 && m<=59 ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` : null;
+}
+function touchTimes(root){
+  root.querySelectorAll('input[type=time]').forEach(i=>{ i.type='text'; i.inputMode='numeric'; i.autocomplete='off'; i.placeholder='hh:mm'; i.maxLength=5; i.classList.add('tm'); });
+}
+if(TOUCH){
+  touchTimes(document);
+  new MutationObserver(ms=>ms.forEach(m=>m.addedNodes.forEach(n=>{ if(n.nodeType===1) touchTimes(n); }))).observe(document.body, {childList:true, subtree:true});
+  document.addEventListener('input', e=>{ const t=e.target; if(!t.classList || !t.classList.contains('tm')) return;
+    const d=t.value.replace(/\D/g,'');
+    if(d.length===4 && !t.value.includes(':')){ const v=normTime(d); if(!v) return; t.value=v;
+      // erst speichern (kann neu zeichnen), dann das nächste Zeitfeld an gleicher Stelle suchen
+      const idx=[...document.querySelectorAll('input.tm')].indexOf(t);
+      t.dispatchEvent(new Event('change',{bubbles:true})); touchTimes(document);
+      document.querySelectorAll('input.tm')[idx+1]?.focus(); } }, true);
+  // vor allen anderen Handlern normalisieren
+  document.addEventListener('change', e=>{ const t=e.target; if(!t.classList || !t.classList.contains('tm')) return;
+    const v=normTime(t.value); if(v===null){ toast('Uhrzeit bitte als hh:mm, z. B. 1430 für 14:30.'); t.value=''; } else t.value=v; }, true);
 }
 
 /* ===================== Ereignisse ===================== */
