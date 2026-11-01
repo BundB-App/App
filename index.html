@@ -167,6 +167,13 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .year{display:grid;gap:8px}
 .year-h{align-items:baseline;padding:0 2px}
 .year-h h2{font-size:26px}
+.set-h{font-size:15px;font-family:var(--f-body);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:12px 0 -4px}
+.set-sec{background:var(--sunk);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.set-toggle{all:unset;box-sizing:border-box;width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;background:var(--surface)}
+.set-toggle b{font:700 22px/1.1 var(--f-display)}
+.set-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.set-arrow{color:var(--muted);font-size:14px}
+.set-body{padding:12px;border-top:1px solid var(--line)}
 .wa-prev{background:var(--accent-soft);border-radius:10px 10px 10px 2px;padding:9px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
 #wa-tpl{min-height:96px;resize:vertical}
 .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font:500 14px var(--f-body);padding:5px 12px 5px 9px;margin-left:-2px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
@@ -1334,14 +1341,21 @@ function vSetup(){
   const rules = live('rules').sort((a,b)=>(a.sample||'').localeCompare(b.sample||''));
   const connected = DBX.connected;
   return `<div class="stack">
-    <div><div class="eyebrow">Sync &amp; Daten</div><h1>Einstellungen</h1></div>
+    <div><div class="eyebrow">B&amp;B</div><h1>Einstellungen</h1></div>
+    <h2 class="set-h">Allgemein</h2>
+    <div class="panel stack"><h2>Darstellung auf diesem Gerät</h2>
+      <div class="seg big3" role="group" aria-label="Darstellung">${[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(([k,l])=>
+        `<button data-act="theme" data-t="${k}" aria-pressed="${(CFG.theme||'auto')===k}">${l}</button>`).join('')}</div>
+      <p class="small muted" style="margin:0">Gilt nur für dieses Gerät, Rechner und Telefon lassen sich getrennt einstellen. „Automatisch“ folgt der Einstellung von iPhone bzw. Mac.</p>
+    </div>
     <a class="panel guide-link" href="#" data-go="anleitung"><span><b>Anleitung: App auf iPhone und Mac einrichten</b><br><span class="small muted">Installieren, mit Dropbox verbinden, Mitarbeiter einrichten</span></span><span aria-hidden="true">›</span></a>
+    <h2 class="set-h">Ganze App</h2>
     <div class="panel stack">
       <div class="row spread"><h2>Dropbox</h2>${connected?'<span class="pill ok">verbunden</span>':'<span class="pill">nicht verbunden</span>'}</div>
       ${connected ? `
         <div class="row" style="align-items:end"><label class="f" style="flex:1 1 220px">Ordner in der Dropbox<input id="cfg-base2" value="${esc(CFG.base)}" spellcheck="false" placeholder="${esc(BASE_DEFAULT)}"></label>
           <button class="btn" data-act="saveBase">Ordner übernehmen</button></div>
-        <p style="margin:0">Daten liegen in <code>${esc(P('lager.json'))}</code>. ${CFG.lastSync?'Zuletzt synchronisiert: '+new Date(CFG.lastSync).toLocaleString('de-DE'):''}</p>
+        <p style="margin:0">Daten liegen im Ordner <code>${esc(CFG.base)}</code> (<code>lager.json</code>, <code>personal.json</code>). ${CFG.lastSync?'Zuletzt synchronisiert: '+new Date(CFG.lastSync).toLocaleString('de-DE'):''}</p>
         ${syncState.s==='err'?`<div class="note">${esc(syncState.msg)}</div>`:''}
         <div class="row"><button class="btn primary" data-act="sync">Jetzt synchronisieren</button>
           <button class="btn danger" data-act="disconnect" data-confirm="Wirklich trennen?">Trennen</button></div>
@@ -1366,7 +1380,7 @@ function vSetup(){
           <p class="small muted" style="margin:0">Der Code gilt nur wenige Minuten und nur einmal. Nach dem Kopieren hierher zurückwechseln und einfügen, nicht noch einmal „Verbinden“ tippen.</p>
         </div>`}
     </div>
-    <div class="panel stack"><h2>App weitergeben</h2>
+    <div class="panel stack"><h2>App weitergeben &amp; Mitarbeiter</h2>
       <div class="grid">
         <div><div class="eyebrow" style="margin-bottom:4px">App-Adresse</div>
           <div class="row" style="gap:8px"><code id="appurl">${esc(APP_URL)}</code><button class="btn sm" data-act="copyText" data-target="appurl">Kopieren</button></div></div>
@@ -1381,19 +1395,9 @@ function vSetup(){
         <li>In der App unter Einstellungen „Verbinden“ tippen und mit dem eigenen Dropbox-Konto anmelden. Mehr ist nicht nötig.</li>
       </ol></div>
     </div>
-    <div class="panel stack"><h2>Darstellung auf diesem Gerät</h2>
-      <div class="seg big3" role="group" aria-label="Darstellung">${[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(([k,l])=>
-        `<button data-act="theme" data-t="${k}" aria-pressed="${(CFG.theme||'auto')===k}">${l}</button>`).join('')}</div>
-      <p class="small muted" style="margin:0">Gilt nur für dieses Gerät, Rechner und Telefon lassen sich getrennt einstellen. „Automatisch“ folgt der Einstellung von iPhone bzw. Mac.</p>
-    </div>
-    <div class="panel stack"><h2>WhatsApp-Terminbestätigung</h2>
-      <p class="small muted" style="margin:0">Wortlaut der Nachricht an die Mitarbeiter. Gilt für alle Geräte. Die Angaben in geschweiften Klammern setzt die App selbst ein.</p>
-      <textarea id="wa-tpl" rows="4" aria-label="Wortlaut">${esc(waTemplate())}</textarea>
-      <div class="chips" aria-label="Platzhalter einfügen">${Object.entries(WA_VARS).map(([k,l])=>`<button type="button" data-act="waVar" data-k="${k}" title="${l}">{${k}}</button>`).join('')}</div>
-      <div><div class="eyebrow" style="margin-bottom:4px">Vorschau</div><div class="wa-prev" id="wa-prev">${esc(waFill(waTemplate(), WA_SAMPLE))}</div></div>
-      <div class="row"><button class="btn primary" data-act="waSave">Speichern</button><button class="btn" data-act="waReset">Standardtext</button></div>
-    </div>
-    <div class="panel stack"><h2>Allgemein</h2>
+    <h2 class="set-h">Bereiche</h2>
+    ${setSec('lager', 'Lager', 'Belege einlesen, gelernte Zuordnungen, Datensicherung, Neustart', `
+    <div class="panel stack"><h2>Belege einlesen</h2>
       <div class="grid"><label class="f">Eigener Firmenname (wird beim Lesen von Rechnungen übersprungen)<input id="cfg-own" value="${esc(CFG.ownName)}"></label></div>
       <label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="cfg-auto" ${CFG.autoBook?'checked':''} style="margin-top:2px">
         <span>Belege aus dem Posteingang ohne Rückfrage buchen, wenn alle Positionen über gelernte Zuordnungen bekannt sind<br><span class="small muted">Unbekannte, unlesbare oder doppelte Belege werden immer zur Prüfung vorgelegt.</span></span></label>
@@ -1404,18 +1408,36 @@ function vSetup(){
         <td class="r"><button class="btn sm danger" data-act="delRule" data-id="${esc(r.id)}" data-confirm="Löschen?">Löschen</button></td></tr>`).join('')}</tbody></table></div>`
       :'<div class="small muted">Entsteht automatisch beim Buchen von Belegen.</div>'}
     </div>
+    <div class="panel stack"><h2>Datensicherung Lager</h2>
+      <div class="row"><button class="btn" data-act="export">Als JSON sichern</button><button class="btn" data-act="import">JSON einspielen</button>
+        <button class="btn danger" data-act="wipe" data-confirm="Alle Daten auf diesem Gerät löschen?">Lokale Daten löschen</button></div>
+      <p class="small muted" style="margin:0">„Lokale Daten löschen“ entfernt nur die Kopie auf diesem Gerät. Bei verbundener Dropbox kommen die Daten beim nächsten Sync zurück.</p>
+    </div>
     <div class="panel stack"><h2>Neustart mit echtem Bestand</h2>
       <p style="margin:0">Löscht <b>alle</b> Artikel, Buchungen, Belegliste und gelernten Zuordnungen, auf diesem Gerät und in der Dropbox. Alle anderen Geräte übernehmen den Neustart beim nächsten Sync automatisch. Belege in den Dropbox-Ordnern bleiben unberührt.</p>
       <p class="small muted" style="margin:0">Tipp: Vorher „Als JSON sichern“. Danach den Bestand unter <b>Inventur → Bestand aus Excel übernehmen</b> einlesen.</p>
       <div class="row"><input id="resetWord" placeholder="Zum Bestätigen NEUSTART eintippen" autocomplete="off" style="flex:1 1 220px">
         <button class="btn danger" data-act="reset">Alles löschen und neu starten</button></div>
     </div>
-    <div class="panel stack"><h2>Datensicherung</h2>
-      <div class="row"><button class="btn" data-act="export">Als JSON sichern</button><button class="btn" data-act="import">JSON einspielen</button>
-        <button class="btn danger" data-act="wipe" data-confirm="Alle Daten auf diesem Gerät löschen?">Lokale Daten löschen</button></div>
-      <p class="small muted" style="margin:0">„Lokale Daten löschen“ entfernt nur die Kopie auf diesem Gerät. Bei verbundener Dropbox kommen die Daten beim nächsten Sync zurück.</p>
+    `)}
+    ${setSec('personal', 'Personal', 'Wortlaut der WhatsApp-Terminbestätigung', `
+    <div class="panel stack"><h2>WhatsApp-Terminbestätigung</h2>
+      <p class="small muted" style="margin:0">Wortlaut der Nachricht an die Mitarbeiter. Gilt für alle Geräte. Die Angaben in geschweiften Klammern setzt die App selbst ein.</p>
+      <textarea id="wa-tpl" rows="4" aria-label="Wortlaut">${esc(waTemplate())}</textarea>
+      <div class="chips" aria-label="Platzhalter einfügen">${Object.entries(WA_VARS).map(([k,l])=>`<button type="button" data-act="waVar" data-k="${k}" title="${l}">{${k}}</button>`).join('')}</div>
+      <div><div class="eyebrow" style="margin-bottom:4px">Vorschau</div><div class="wa-prev" id="wa-prev">${esc(waFill(waTemplate(), WA_SAMPLE))}</div></div>
+      <div class="row"><button class="btn primary" data-act="waSave">Speichern</button><button class="btn" data-act="waReset">Standardtext</button></div>
     </div>
+    `)}
   </div>`;
+}
+/* Aufklappbare Bereichs-Einstellungen; ohne eigene Wahl ist der Bereich offen, aus dem man kommt */
+let setOpen = {};
+function setSec(k, title, sub, body){
+  const open = setOpen[k] ?? curArea===k;
+  return `<section class="set-sec"><button class="set-toggle" data-act="setSec" data-k="${k}" aria-expanded="${open}">
+      <span><b>${title}</b><br><span class="small muted">${sub}</span></span><span class="set-arrow" aria-hidden="true">${open?'▴':'▾'}</span></button>
+    ${open ? `<div class="stack set-body">${body}</div>` : ''}</section>`;
 }
 
 /* Anleitung zum Einrichten auf iPhone und Mac (unter Einstellungen) */
@@ -2120,6 +2142,7 @@ document.addEventListener('click', async e=>{
       t.value=t.value.slice(0,a)+k+t.value.slice(b); t.focus(); t.setSelectionRange(a+k.length,a+k.length); $('#wa-prev').textContent=waFill(t.value||WA_DEFAULT, WA_SAMPLE); break; }
     case 'waSave': { const v=$('#wa-tpl').value.trim(); put('settings',{id:'wa', text: v===WA_DEFAULT ? '' : v}); persist(); $('#wa-tpl').blur(); render(); toast('Wortlaut gespeichert'); break; }
     case 'waReset': $('#wa-tpl').value=WA_DEFAULT; $('#wa-prev').textContent=waFill(WA_DEFAULT, WA_SAMPLE); toast('Standardtext eingesetzt. Zum Übernehmen „Speichern“ tippen.'); break;
+    case 'setSec': setOpen[el.dataset.k] = el.getAttribute('aria-expanded')!=='true'; render(); break;
     case 'copyKey': navigator.clipboard?.writeText(CFG.appKey).then(()=>toast('App key kopiert'),()=>{ const r=document.createRange(); r.selectNodeContents($('#appkey')); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); }); break;
     case 'sync': if(DBX.connected) sync(); else { view='setup'; render(); } break;
     case 'addArt': addingArt=true; render(); $('#na-name')?.focus(); break;

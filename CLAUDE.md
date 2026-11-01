@@ -94,6 +94,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 ## Design
 
 - Eigene Tokens in `:root` (Flaschengrün `--accent`), Hell- und Dunkelmodus über `prefers-color-scheme` **und** `[data-theme]`.
+- Einstellungsseite (`vSetup`): Allgemein (Darstellung, Anleitung) → Ganze App (Dropbox, Weitergeben/Mitarbeiter) → Bereiche Lager/Personal aufklappbar (`setSec`, offen ist der Bereich, aus dem man kommt).
 - Darstellung pro Gerät unter Einstellungen (Automatisch/Hell/Dunkel): `CFG.theme`, wird schon im `<head>` als `data-theme` gesetzt (kein Aufblitzen).
 - Schriften: Barlow Condensed (Zahlen/Überschriften), IBM Plex Sans/Mono.
 - Mobil: untere Tab-Leiste, Safe-Area-Insets beachten, Mindestbreite 390 px testen.
