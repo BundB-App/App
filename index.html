@@ -167,6 +167,8 @@ button.stat.need .eyebrow{padding-right:14px;overflow:hidden;text-overflow:ellip
 .year{display:grid;gap:8px}
 .year-h{align-items:baseline;padding:0 2px}
 .year-h h2{font-size:26px}
+.wa-prev{background:var(--accent-soft);border-radius:10px 10px 10px 2px;padding:9px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+#wa-tpl{min-height:96px;resize:vertical}
 .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font:500 14px var(--f-body);padding:5px 12px 5px 9px;margin-left:-2px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
 .back span{font:700 20px/1 var(--f-display);margin-top:-2px}
 .back:hover{color:var(--ink);border-color:var(--muted)}
@@ -523,8 +525,8 @@ const DEVICE = CFG.device;
    übernehmen beim Merge nur COLLS und würden neue Sammlungen dort verwerfen.
    events sind allgemein gehalten, die spätere Material-Reservierung nutzt dieselben Events. */
 const LS_PDATA='bb-personal-data-v1';
-const PCOLLS=['persons','events','assignments'];
-function emptyPState(){ return {persons:{},events:{},assignments:{},meta:{v:1}}; }
+const PCOLLS=['persons','events','assignments','settings'];   // settings: gemeinsame Einstellungen, z. B. {id:'wa', text}
+function emptyPState(){ return {persons:{},events:{},assignments:{},settings:{},meta:{v:1}}; }
 let PS = Object.assign(emptyPState(), lsGet(LS_PDATA)||{});
 PCOLLS.forEach(c=>{ if(!PS[c]) PS[c]={}; });
 const store = coll => PCOLLS.includes(coll) ? PS : S;
@@ -1384,6 +1386,13 @@ function vSetup(){
         `<button data-act="theme" data-t="${k}" aria-pressed="${(CFG.theme||'auto')===k}">${l}</button>`).join('')}</div>
       <p class="small muted" style="margin:0">Gilt nur für dieses Gerät, Rechner und Telefon lassen sich getrennt einstellen. „Automatisch“ folgt der Einstellung von iPhone bzw. Mac.</p>
     </div>
+    <div class="panel stack"><h2>WhatsApp-Terminbestätigung</h2>
+      <p class="small muted" style="margin:0">Wortlaut der Nachricht an die Mitarbeiter. Gilt für alle Geräte. Die Angaben in geschweiften Klammern setzt die App selbst ein.</p>
+      <textarea id="wa-tpl" rows="4" aria-label="Wortlaut">${esc(waTemplate())}</textarea>
+      <div class="chips" aria-label="Platzhalter einfügen">${Object.entries(WA_VARS).map(([k,l])=>`<button type="button" data-act="waVar" data-k="${k}" title="${l}">{${k}}</button>`).join('')}</div>
+      <div><div class="eyebrow" style="margin-bottom:4px">Vorschau</div><div class="wa-prev" id="wa-prev">${esc(waFill(waTemplate(), WA_SAMPLE))}</div></div>
+      <div class="row"><button class="btn primary" data-act="waSave">Speichern</button><button class="btn" data-act="waReset">Standardtext</button></div>
+    </div>
     <div class="panel stack"><h2>Allgemein</h2>
       <div class="grid"><label class="f">Eigener Firmenname (wird beim Lesen von Rechnungen übersprungen)<input id="cfg-own" value="${esc(CFG.ownName)}"></label></div>
       <label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="cfg-auto" ${CFG.autoBook?'checked':''} style="margin-top:2px">
@@ -1812,11 +1821,18 @@ function vPPersonen(){
 
 /* WhatsApp-Terminbestätigung: mit hinterlegter Nummer direkt in den Chat dieser Person
    (iPhone: WhatsApp-App über whatsapp://, Rechner: wa.me), sonst Teilen-Menü, sonst Text kopieren */
+/* Wortlaut aus den Einstellungen (für alle Geräte gleich), Platzhalter setzt die App ein */
+const WA_DEFAULT = 'Hallo {vorname}, Terminbestätigung: {event} am {datum}, {zeit} Uhr, Rolle {kategorie}. Danke!';
+const WA_VARS = {vorname:'Vorname', name:'ganzer Name', event:'Event (mit Tag)', tag:'Tag-Bezeichnung', datum:'Datum', zeit:'Uhrzeit', kategorie:'Kategorie'};
+function waTemplate(){ const t=PS.settings.wa; return t && !t.deleted && t.text && t.text.trim() ? t.text : WA_DEFAULT; }
+function waFill(tpl, v){ return tpl.replace(/\{(\w+)\}/g, (m,k)=> k in v ? v[k] : m); }
 function waText(a){
   const ev = PS.events[a.eventId], p = PS.persons[a.personId], day = dayOf(ev, a);
-  const first = String(p ? p.name : '').trim().split(/\s+/)[0];
-  return `Hallo ${first}, Terminbestätigung: ${ev.name}${day.label?' ('+day.label+')':''} am ${dWD(day.date)}, ${tSpan(a.planStart,a.planEnd)} Uhr, Rolle ${roleName(ev,a.role)}. Danke!`;
+  const name = String(p ? p.name : '').trim();
+  return waFill(waTemplate(), {vorname:name.split(/\s+/)[0], name, event:ev.name+(day.label?' ('+day.label+')':''), tag:day.label||'',
+    datum:dWD(day.date), zeit:tSpan(a.planStart,a.planEnd), kategorie:roleName(ev,a.role)});
 }
+const WA_SAMPLE = {vorname:'Anna', name:'Anna Schmidt', event:'Hochzeit Müller (Aufbau)', tag:'Aufbau', datum:'Sa, 12.06.2027', zeit:'14:00–23:00', kategorie:'Gastronomie'};
 function waPhone(s){
   let d = String(s||'').replace(/[^\d+]/g,'');
   if(d.startsWith('+')) d=d.slice(1); else if(d.startsWith('00')) d=d.slice(2); else if(d.startsWith('0')) d='49'+d.slice(1);
@@ -2100,6 +2116,10 @@ document.addEventListener('click', async e=>{
     case 'theme': { const t=el.dataset.t; CFG.theme = t==='auto' ? '' : t; saveCfg();
       if(CFG.theme) document.documentElement.dataset.theme=CFG.theme; else delete document.documentElement.dataset.theme;
       render(); break; }
+    case 'waVar': { const t=$('#wa-tpl'), k='{'+el.dataset.k+'}', a=t.selectionStart??t.value.length, b=t.selectionEnd??a;
+      t.value=t.value.slice(0,a)+k+t.value.slice(b); t.focus(); t.setSelectionRange(a+k.length,a+k.length); $('#wa-prev').textContent=waFill(t.value||WA_DEFAULT, WA_SAMPLE); break; }
+    case 'waSave': { const v=$('#wa-tpl').value.trim(); put('settings',{id:'wa', text: v===WA_DEFAULT ? '' : v}); persist(); $('#wa-tpl').blur(); render(); toast('Wortlaut gespeichert'); break; }
+    case 'waReset': $('#wa-tpl').value=WA_DEFAULT; $('#wa-prev').textContent=waFill(WA_DEFAULT, WA_SAMPLE); toast('Standardtext eingesetzt. Zum Übernehmen „Speichern“ tippen.'); break;
     case 'copyKey': navigator.clipboard?.writeText(CFG.appKey).then(()=>toast('App key kopiert'),()=>{ const r=document.createRange(); r.selectNodeContents($('#appkey')); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Markiert – jetzt kopieren'); }); break;
     case 'sync': if(DBX.connected) sync(); else { view='setup'; render(); } break;
     case 'addArt': addingArt=true; render(); $('#na-name')?.focus(); break;
@@ -2159,6 +2179,7 @@ document.addEventListener('input', e=>{
       if(b&&a){ const st=stockMap(); b.innerHTML=`${QB.dir<0?'−':'+'} ${fmt(QB.qty)} ${esc(a.unit)} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt((st[a.id]||0)+QB.dir*QB.qty)}</span>`; } return; }
     if(t.id==='qb-note'){ QB.note=t.value; return; }
   }
+  if(t.id==='wa-tpl'){ $('#wa-prev').textContent=waFill(t.value||WA_DEFAULT, WA_SAMPLE); return; }
   if(t.classList.contains('pc-name')){ document.querySelectorAll(`#pe-days .prole[data-r="${t.dataset.id}"] .prole-n`).forEach(n=>n.textContent=t.value||'…'); return; }
   if(pq){
     if(t.id==='pq-q'){ pq.q=t.value; $('#pq-list').innerHTML=pqPersonList(); return; }

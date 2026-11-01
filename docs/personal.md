@@ -30,6 +30,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
                         status: 'angefragt'|'bestaetigt'|'abgesagt',
                         actualStart?, actualEnd? /* von der Teamleitung nach dem Event */,
                         updatedAt, deleted?} },
+  settings: { wa: {id:'wa', text /* Wortlaut WhatsApp-Bestätigung mit {vorname} {name} {event} {tag} {datum} {zeit} {kategorie}; leer = Standard */, updatedAt} },
   meta: { v:1, savedAt, by, resetAt }
 }
 ```
@@ -48,6 +49,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - „Schnell buchen“ nur auf der Startseite. Im Event-Formular schwebt die Leiste Speichern/Abbrechen unten mit (`.save-bar`, sticky); „Event löschen“ steht am Formularende.
 - Event-Liste nach Jahren (Jahr des ersten Tages), sortiert nach Event-Datum; vergangene Events je Jahr unten zugeklappt.
 - WhatsApp: mit hinterlegter Nummer direkt in den Chat (iPhone `whatsapp://send?phone=…&text=…`, Rechner `wa.me`); Nummern mit 0 werden als +49 gelesen. Ohne Nummer Teilen-Menü.
+- WhatsApp-Wortlaut unter Einstellungen frei änderbar (gemeinsam für alle Geräte, `settings.wa`), Platzhalter per Antippen, Vorschau.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
