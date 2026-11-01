@@ -19,7 +19,7 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
                     payType: 'hour'|'day', rate /* € pro Stunde oder Tagespauschale */, note, updatedAt, deleted?} },
   events:  { [id]: {id, name,
                     roles: [{id, name}] /* Kategorien des Events: Vorschläge gastro/technik/aufbau/abbau (id = Schlüssel) oder eigene */,
-                    days: [{id, date /* YYYY-MM-DD */, label /* frei, z. B. „Aufbau“ */,
+                    days: [{id, date /* YYYY-MM-DD */, label /* frei, z. B. „Aufbau“ */, cats /* ids der Kategorien an diesem Tag; fehlt = alle */,
                             need: { gastro: 4, technik: 1, aufbau: 2, abbau: 2 },
                             times: { gastro: {start, end}, … } /* eigene Zeiten pro Rolle */,
                             start, end /* abgeleitet: frühester Beginn bis spätestes Ende */}],  /* ein Eintrag pro Tag (Unter-Event) */
@@ -50,6 +50,10 @@ Sie kommt **nicht** in `lager.json`: `merge()` übernimmt nur Sammlungen aus `CO
 - Event-Liste nach Jahren (Jahr des ersten Tages), sortiert nach Event-Datum; vergangene Events je Jahr unten zugeklappt.
 - WhatsApp: mit hinterlegter Nummer direkt in den Chat (iPhone `whatsapp://send?phone=…&text=…`, Rechner `wa.me`); Nummern mit 0 werden als +49 gelesen. Ohne Nummer Teilen-Menü.
 - WhatsApp-Wortlaut unter Einstellungen frei änderbar (gemeinsam für alle Geräte, `settings.wa`), Platzhalter per Antippen, Vorschau.
+- Kategorien pro Tag: im Formular je Tag entfernen (×), aus den Event-Kategorien hinzufügen oder „nur für diesen Tag“ neu anlegen. Neue Event-Kategorie gilt für alle Tage.
+- Kacheln zeigen die Namen der Bestätigten; aufgeklappt: Plan, WhatsApp, Ist-Zeit (Eintragen dort, speichert ohne Neuzeichnen). Einsatz-Zeilen zeigen Ist nur als Text.
+- Zeitstrahl (Knopf neben den Tagen bzw. in der Übersicht): je Kategorie Bedarfsfenster und Zahl der Bestätigten über die Zeit (Planzeiten), Lücken rot mit Uhrzeit.
+- Einplanen-Überschriften: Kategorie · Datum des Tages.
 - Status je Einsatz: kleines Auswahlfeld neben dem Namen (bewusst unauffällig).
 - WhatsApp-Bestätigung nur noch über die Rollen-Kacheln im Event (aufklappbar, Liste der Bestätigten), nicht mehr in jeder Einsatz-Zeile.
 - Status wird im Event über drei Knöpfe gesetzt (angefragt / bestätigt / abgesagt). Formularfelder für Zeiten und Bedarf sind leer statt 0.
