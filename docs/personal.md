@@ -95,3 +95,4 @@ Monatsauswertung, Export, Kostenberechnung, Pausen, Zugang für Mitarbeiter, Kun
 
 - Muster aus dem Lager übernehmen: `put`/`del`/`live`, `sync()`, Ereignis-Delegation über `data-act`. Sync für `personal.json` einbauen: eigener Zustand, eigener `localStorage`-Schlüssel, derselbe Sync-Knopf. Fehlt die Datei, wird sie beim ersten Speichern angelegt.
 - Release wie in `CLAUDE.md` (APP_CACHE hochzählen, sofort live, Dropbox-Spiegel). Am iPhone in 390 px Breite und im Dunkelmodus testen.
+- Übersicht: Knopf „Sortieren“ zeigt die Kategorien als Liste mit ↑/↓. Die Reihenfolge wird in `ev.roles` gespeichert und gilt für Kacheln und Einplanen an allen Tagen des Events.

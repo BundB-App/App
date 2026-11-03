@@ -305,6 +305,10 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .asg-row{position:relative}
 .asg-row .asg-edit{flex:1;min-width:0}
 .asg-row .pay{position:absolute;top:0;right:0}
+.sort-list{display:grid;gap:6px}
+.sort-row{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px 6px 12px}
+.sort-row span{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sort-row .btn{min-width:40px;justify-content:center}
 </style>
 </head>
 <body>
@@ -1570,6 +1574,7 @@ const dayDiff = (a,b) => Math.round((Date.UTC(...b.split('-').map((x,i)=>i===1?x
 function dateRange(from, to){ const out=[]; if(!from) return out; to = to && to>from ? to : from;
   for(let s=from; s<=to && out.length<31; s=addDays(s,1)) out.push(s); return out; }
 let pTile = null;   // aufgeklappte Rollen-Kachel im Event
+let pSortTiles = false;   // Kategorien eines Events sortieren
 let pEventId = null, pDayId = null, pEditEvent = false, pAddEvent = false, pEditPerson = null, pPastOpen = {}, pq = null;   // pPastOpen: aufgeklappte vergangene Jahre
 
 /* Ein Event hat einen oder mehrere Tage (Unter-Events) mit eigenen Zeiten und eigenem Bedarf:
@@ -1845,13 +1850,15 @@ function vPEvent(){
     ${multi ? `<div class="row day-row"><div class="daychips" role="group" aria-label="Tag">${days.map((x,i)=>`<button data-act="pDay" data-id="${x.id}" aria-pressed="${x.id===day.id}"><i class="dot amp-${dayState(ev,x).amp}"></i>${esc(dayName(x,i))}<small>${dShort(x.date)}</small></button>`).join('')}</div></div>
       <div class="row spread" style="flex-wrap:nowrap"><div style="min-width:0"><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dWD(day.date)}</h2></div>
         <button class="btn tl-btn" data-act="pTimeline" aria-label="Zeitstrahl öffnen">${TL_ICON}<span>Zeitstrahl</span></button></div>` : ''}
-    ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span>${multi?'<span class="small muted">Kachel antippen: Bestätigte</span>':`<button class="btn sm tl-btn" data-act="pTimeline">${TL_ICON}<span>Zeitstrahl</span></button>`}</div>
-      <div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
+    ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span><span class="row" style="gap:6px">${multi||pSortTiles?'':`<button class="btn sm tl-btn" data-act="pTimeline">${TL_ICON}<span>Zeitstrahl</span></button>`}${roles.length>1?`<button class="btn sm${pSortTiles?' primary':''}" data-act="pSortTiles">${pSortTiles?'Fertig':'Sortieren'}</button>`:''}</span></div>
+      ${pSortTiles ? `<div class="sort-list">${roles.map((r,i)=>`<div class="sort-row"><span>${esc(roleName(ev,r))}</span>
+          <button class="btn sm" data-act="pMoveRole" data-r="${r}" data-dir="-1" aria-label="${esc(roleName(ev,r))} nach oben" ${i?'':'disabled'}>↑</button><button class="btn sm" data-act="pMoveRole" data-r="${r}" data-dir="1" aria-label="${esc(roleName(ev,r))} nach unten" ${i<roles.length-1?'':'disabled'}>↓</button></div>`).join('')}
+        <div class="small muted">Reihenfolge gilt für Kacheln und Einplanen, an allen Tagen dieses Events.</div></div>` : `<div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
         const cls = roleCoverage(ev, day, r).state;   // rot zu wenige, blau überbelegt (auch kurz), grün genau
         return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span>
           ${c ? `<span class="tile-names">${as.filter(a=>a.role===r&&a.status==='bestaetigt').map(a=>personName(a.personId)).sort((x,y)=>x.localeCompare(y)).map(n=>`<span>${esc(n)}</span>`).join('')}</span>` : ''}
-          <span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>
-      ${tile ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
+          <span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>`}
+      ${tile && !pSortTiles ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
         ${okList.length ? okList.map(a=>{ const p=PS.persons[a.personId], df=istDiff(a); return `<div class="tile-p">
           <div class="row spread" style="flex-wrap:nowrap"><span style="min-width:0"><b>${esc(personName(a.personId))}</b><br>
             <span class="small muted">Plan ${tSpan(a.planStart,a.planEnd)||'–'}</span></span>
@@ -2251,7 +2258,7 @@ document.addEventListener('click', async e=>{
     case 'pqRole': pq.role=el.dataset.r; pqTimes(); renderPQ(); break;
     case 'pqShift': pq.shiftId=id||''; pqTimes(); renderPQ(); break;
     case 'pqBook': pqBook(); break;
-    case 'pOpenEvent': pEventId=id; pDayId=null; pEditEvent=false; view='pEvent'; render(); window.scrollTo(0,0); break;
+    case 'pOpenEvent': pSortTiles=false; pEventId=id; pDayId=null; pEditEvent=false; view='pEvent'; render(); window.scrollTo(0,0); break;
     case 'pAddEvent': pAddEvent=true; peRoles=null; render(); $('#pe-name')?.focus(); break;
     case 'pCancelEvent': pAddEvent=false; peRoles=null; render(); break;
     case 'pEditEvent': pEditEvent=!pEditEvent; peRoles=null; render();
@@ -2282,6 +2289,13 @@ document.addEventListener('click', async e=>{
     case 'tlDay': tlDayId=id; renderTimeline(); break;
     case 'tlClose': tlClose(); break;
     case 'tlBack': if(e.target===el) tlClose(); break;
+    case 'pSortTiles': pSortTiles=!pSortTiles; render(); break;
+    case 'pMoveRole': { const ev=PS.events[pEventId], day=dayOf(ev,{dayId:pDayId}), list=rolesOf(ev).map(x=>({...x}));
+      // nur zwischen den an diesem Tag sichtbaren Kategorien tauschen
+      const vd=rolesOfDay(ev,day).map(x=>x.id), vis=vd.includes(el.dataset.r)?vd:list.map(x=>x.id), j=vis.indexOf(el.dataset.r), other=vis[j+Number(el.dataset.dir)];
+      if(other==null) break;
+      const a=list.findIndex(x=>x.id===el.dataset.r), b=list.findIndex(x=>x.id===other); [list[a],list[b]]=[list[b],list[a]];
+      ev.roles=list; put('events',ev); persist(); render(); break; }
     case 'pTile': pTile = pTile===el.dataset.r ? null : el.dataset.r; render(); break;
     case 'peCopyDay1': { const f=[...document.querySelectorAll('#pe-days .pday')]; const src=f[0];
       f.slice(1).forEach(x=>x.querySelectorAll('.prole[data-r] input').forEach(i=>{ const v=src.querySelector(`.prole[data-r="${i.closest('.prole').dataset.r}"] .${i.classList[0]}`); if(v) i.value=v.value; }));
