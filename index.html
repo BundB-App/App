@@ -118,6 +118,15 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line .ek-desc{grid-column:1/-1;font-weight:600;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
+.pk-row{display:grid;grid-template-columns:auto minmax(0,1fr) 84px minmax(60px,auto) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.pk-row:first-child{border-top:0}
+.pk-row input[type=checkbox]{width:24px;height:24px}
+.pk-row.on .ek-bname{text-decoration:line-through;color:var(--muted)}
+.pk-row .ek-bqty{text-align:right;font-weight:700}
+.pg-row{display:grid;grid-template-columns:minmax(0,1fr) 80px auto auto;gap:6px 8px;align-items:center}
+.ok-note{background:var(--accent-soft);border-color:var(--accent)}
+@media (max-width:560px){ .pk-row{grid-template-columns:auto 84px minmax(0,1fr) auto} .pk-row .ek-bname{grid-column:2/-1;grid-row:1} .pk-row input[type=checkbox]{grid-row:1/3;align-self:start;margin-top:2px}
+  .pg-row{grid-template-columns:minmax(0,1fr) 70px auto} .pg-row > span:first-child,.pg-row > input[list]{grid-column:1/-1} .pg-row .small{display:none} }
 .ek-sec{margin:8px 0 0;font:700 20px/1.1 var(--f-display);letter-spacing:.02em}
 hr.ek-sep{border:0;border-top:3px solid var(--ink);opacity:.55;margin:14px 0 2px}
 .ek-brow{display:grid;grid-template-columns:minmax(0,1fr) auto 84px minmax(60px,auto) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
@@ -346,9 +355,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   <nav class="tabs" id="tabs">
     <button data-go="bestand">Bestand</button>
     <button data-go="einkauf">Einkauf</button>
-    <button data-go="belege">Belege</button>
-    <button data-go="buchungen">Buchungen</button>
-    <button data-go="inventur">Inventur</button>
+    <button data-go="packliste">Packliste</button>
     <button data-go="setup">Einstellungen</button>
   </nav>
   <nav class="tabs" id="ptabs">
@@ -1089,14 +1096,18 @@ function finishQueueItem(imp){
   render();
 }
 function openNextReady(){
+  if(!BELEGE_AKTIV) return;
   const next = QUEUE.find(q=>q.status==='ready'||q.status==='manual');
   // Auf der Startseite und im Personal-Bereich nicht ungefragt in die Belege springen
   if(next && areaOf(view)==='lager'){ IMP = next.imp; view='belege'; }
 }
 
 /* Beim Start und bei Rückkehr zur App: _Neu-Ordner prüfen und alles einlesen */
+/* Belege (Eingangs-/Ausgangsrechnungen) sind seit v52 abgeschaltet: das Lager wird über Einkauf („Aus Lager entnehmen“)
+   und Inventur geführt. Code bleibt für später, BELEGE_AKTIV schaltet ihn wieder ein. */
+const BELEGE_AKTIV = false;
 async function scanInbox(openFirst){
-  if(!DBX.connected) return;
+  if(!DBX.connected || !BELEGE_AKTIV) return;
   await loadInbox();
   const files = [...(inboxCache.in||[]).map(f=>({f,dir:'in'})), ...(inboxCache.out||[]).map(f=>({f,dir:'out'}))];
   const paths = new Set(files.map(x=>x.f.path_lower));
@@ -1424,13 +1435,31 @@ function artDetail(a, s){
       <label class="f">Einheit (Mehrzahl)<input data-edit="unitPl" data-id="${a.id}" value="${esc(a.unitPl)}" placeholder="z. B. Flaschen"></label>
       <label class="f">Mindestbestand<input data-edit="min" data-id="${a.id}" inputmode="decimal" value="${fmt(a.min||0)}"></label>
       <label class="f">EK je ${esc(a.unit||'Einheit')}<input data-edit="lastPrice" data-id="${a.id}" inputmode="decimal" value="${fmt(a.lastPrice||0,4)}"></label>
-      <label class="f">Name auf Rechnungen (falls anders)<input data-edit="alias" data-id="${a.id}" value="${esc(a.alias)}" placeholder="–"></label>
+      <label class="f">Name im Angebot (falls anders)<input data-edit="alias" data-id="${a.id}" value="${esc(a.alias)}" placeholder="–"></label>
     </div>
     <label class="f">Zusätzliche Beschreibung<textarea data-edit="desc" data-id="${a.id}" rows="${Math.min(12, Math.max(2, String(a.desc||'').split('\n').length + Math.floor(String(a.desc||'').length/70)))}">${esc(a.desc)}</textarea></label>
-    <p class="small muted" style="margin:0">${kindOf(a)==='ware'?'Ware: Ausgangsrechnungen buchen sie aus.':'Ausgangsrechnungen buchen '+KINDS[kindOf(a)]+' nicht aus (im Beleg von Hand einschaltbar).'}</p>
+    ${pgHtml(a)}
     <div><div class="eyebrow" style="margin-bottom:4px">Letzte Buchungen</div>
       ${mvs.map(m=>mvRow(m,false)).join('') || '<div class="small muted">Noch keine Buchungen.</div>'}</div>
     <div class="row"><button class="btn sm danger" data-act="delArt" data-id="${a.id}" data-confirm="Artikel und Buchungen löschen?">Artikel löschen</button></div>
+  </div>`;
+}
+/* Produktgruppen (Wunsch Thomas): Eine Produktgruppe heißt wie ein Artikel aus dem Angebot, z. B. „Zuckerwatte Maschine - 1200W“.
+   Zubehör bekommt die Gruppe zugeordnet, mit Menge je Einheit im Angebot: a.groups = {[Artikel-ID der Gruppe]: Menge}.
+   Ein Artikel kann in mehreren Gruppen sein. Die Packliste nimmt bei jeder Angebotsposition die Artikel ihrer Gruppe mit. */
+const pgMembers = leaderId => live('articles').filter(m=>m.groups && Number(m.groups[leaderId])>0).map(m=>({m, qty:Number(m.groups[leaderId])}));
+function pgHtml(a){
+  const gs = Object.entries(a.groups||{}).filter(([g,q])=>S.articles[g] && !S.articles[g].deleted && Number(q)>0);
+  const mem = pgMembers(a.id);
+  return `<div class="stack" style="gap:6px"><div class="eyebrow">Produktgruppen</div>
+    ${gs.map(([g,q])=>`<div class="pg-row"><span>${esc(S.articles[g].name)}</span>
+      <input data-pgq="${g}" data-id="${a.id}" inputmode="decimal" value="${fmt(q,3)}" aria-label="Menge je Einheit"><span class="small muted">je Einheit</span>
+      <button class="btn sm danger" data-act="pgDel" data-id="${a.id}" data-g="${g}" aria-label="Aus Produktgruppe entfernen">✕</button></div>`).join('')}
+    <div class="pg-row"><input id="pg-new-${a.id}" list="dl-arts" placeholder="Produktgruppe = Artikelname aus dem Angebot">
+      <input id="pg-qty-${a.id}" inputmode="decimal" value="1" aria-label="Menge je Einheit"><span class="small muted">je Einheit</span>
+      <button class="btn sm" data-act="pgAdd" data-id="${a.id}">Zuordnen</button></div>
+    <datalist id="dl-arts">${live('articles').filter(x=>x.id!==a.id).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(x=>`<option value="${esc(x.name)}">`).join('')}</datalist>
+    ${mem.length?`<div class="small muted">Zur Produktgruppe „${esc(a.name)}“ gehören: ${mem.map(x=>`${esc(x.m.name)} (${fmt(x.qty,3)} je Einheit)`).join(', ')}</div>`:''}
   </div>`;
 }
 const TYPE_LABEL = {in:'Eingang', out:'Ausgang', inv:'Inventur', manual:'Manuell'};
@@ -1561,6 +1590,7 @@ function vBuchungen(){
   const mvs = live('movements').filter(m=>!mvFilter || m.articleId===mvFilter || m.type===mvFilter)
     .sort((x,y)=>(y.date||'').localeCompare(x.date||'')||y.updatedAt-x.updatedAt);
   return `<div class="stack">
+    <div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div>
     <div class="row spread"><div><div class="eyebrow">Warenbewegungen</div><h1>Buchungen</h1></div>
       <select id="mvFilter" style="width:auto;max-width:100%"><option value="">Alle</option>
         <option value="in" ${mvFilter==='in'?'selected':''}>Nur Eingang</option><option value="out" ${mvFilter==='out'?'selected':''}>Nur Ausgang</option>
@@ -1588,12 +1618,12 @@ function vInventur(){
   const importBox = `<div class="panel stack"><div class="row spread"><h2>Bestand aus Excel übernehmen</h2>
       <div class="row"><button class="btn" data-act="xlTemplate">Vorlage laden</button><button class="btn primary" data-act="xlPick">Excel/CSV wählen</button></div></div>
       <p class="small muted" style="margin:0">Spalten: Bezeichnung, Bestand, optional Beschreibung, Artikelgruppe, Artikeltyp (Ware/Leistung), Einheit Einzahl und Mehrzahl, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt, leere Zellen ändern nichts.</p></div>`;
-  if(!all.length) return `<div class="stack"><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
+  if(!all.length) return `<div class="stack"><div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
   const q = normText(invQ);
   const arts = all.filter(a=>artMatch(a,q) && (!hideSvc || q || !pureService(a,st)));
   const counted = Object.values(invCounts).filter(v=>v!==''&&v!=null).length;
   return `<div class="stack">
-    <div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
+    <div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
     ${importBox}
     <p class="muted" style="margin:0">Trage den gezählten Bestand ein, auch Dezimalwerte wie 6,75 für angebrochene Flaschen. Leere Felder bleiben unverändert. Beim Buchen wird die Differenz als Inventurbuchung erfasst${DBX.connected?' und ein Protokoll im Ordner <code>Inventur</code> abgelegt':''}.</p>
     ${listControls('invq')}
@@ -1662,13 +1692,17 @@ function vSetup(){
       </ol></div>
     </div>
     <h2 class="set-h">Bereiche</h2>
-    ${setSec('lager', 'Lager', 'Belege einlesen, gelernte Zuordnungen, Datensicherung, Neustart', `
-    <div class="panel stack"><h2>Belege einlesen</h2>
+    ${setSec('lager', 'Lager', 'Inventur, Buchungen, gelernte Zuordnungen, Datensicherung, Neustart', `
+    <div class="panel stack"><h2>Inventur &amp; Buchungen</h2>
+      <div class="row"><button class="btn primary" data-go="inventur">Inventur öffnen</button><button class="btn" data-go="buchungen">Buchungen ansehen</button></div>
+      <p class="small muted" style="margin:0">Inventur: Bestand zählen oder aus Excel übernehmen. Buchungen: alle Zu- und Abgänge, einzeln stornierbar.</p>
+    </div>
+    ${BELEGE_AKTIV?`<div class="panel stack"><h2>Belege einlesen</h2>
       <div class="grid"><label class="f">Eigener Firmenname (wird beim Lesen von Rechnungen übersprungen)<input id="cfg-own" value="${esc(CFG.ownName)}"></label></div>
       <label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="cfg-auto" ${CFG.autoBook?'checked':''} style="margin-top:2px">
         <span>Belege aus dem Posteingang ohne Rückfrage buchen, wenn alle Positionen über gelernte Zuordnungen bekannt sind<br><span class="small muted">Unbekannte, unlesbare oder doppelte Belege werden immer zur Prüfung vorgelegt.</span></span></label>
-    </div>
-    <div class="panel stack"><div class="row spread"><h2>Gelernte Zuordnungen</h2><span class="muted small num">${rules.length}</span></div>
+    </div>`:''}
+    <div class="panel stack"><div class="row spread"><h2>Gelernte Zuordnungen (Angebote)</h2><span class="muted small num">${rules.length}</span></div>
       ${rules.length?`<div class="tbl"><table><thead><tr><th>Text auf dem Beleg</th><th>Lagerartikel</th><th class="r">Faktor</th><th></th></tr></thead><tbody>
       ${rules.map(r=>`<tr><td>${esc(r.sample)}${r.id.startsWith('a:')?' <span class="tag">Art.-Nr.</span>':''}<br><span class="small muted">${esc(r.party||'')}</span></td><td>${esc(S.articles[r.articleId]?.name||'(gelöscht)')}</td><td class="r num">${fmt(r.factor,4)}</td>
         <td class="r"><button class="btn sm danger" data-act="delRule" data-id="${esc(r.id)}" data-confirm="Löschen?">Löschen</button></td></tr>`).join('')}</tbody></table></div>`
@@ -1798,6 +1832,29 @@ function ekLineFrom(it, party, eventId, pos){
   return {id:uid(), eventId, desc:it.desc, qty:Number(it.qty)||0, unit:it.unit||'', articleId, how, src:'angebot', pos};
 }
 
+function ekTake(id){
+  const e = ES.ekEvents[id]; if(!e || e.took) return;
+  const c = ekCalc(id); let n = 0; const res = {};
+  for(const r of c.rows){
+    for(const t of r.take||[]){ const a=S.articles[t.id];
+      put('movements',{id:uid(), articleId:t.id, qty:-t.qty, type:'manual', reason:'Entnahme Veranstaltung', date:today(), note:e.name, ekId:id}); n++; }
+    if(r.res>0) res[r.famId] = r.res;
+  }
+  e.took = {at:now(), res}; put('ekEvents', e); persist();
+  toast(n || Object.keys(res).length ? `Aus Lager entnommen: ${n} Buchungen${Object.keys(res).length?`, ${Object.keys(res).length} Geräte reserviert`:''}` : 'Nichts im Lager, nichts entnommen.');
+}
+function ekUntake(id){
+  const e = ES.ekEvents[id]; if(!e) return;
+  ekTookMv(id).forEach(m=>del('movements', m.id));
+  e.took = null; put('ekEvents', e); persist(); toast('Entnahme zurückgenommen, Lagerbestand wieder da.');
+}
+/* Stimmt die gebuchte Entnahme noch mit dem Bedarf überein? (Bedarf nach dem Entnehmen geändert) */
+function ekTakeDiff(id, c){
+  const want = {}; c.rows.forEach(r=>(r.take||[]).forEach(t=>want[t.id]=(want[t.id]||0)+t.qty));
+  const have = {}; ekTookMv(id).forEach(m=>have[m.articleId]=(have[m.articleId]||0)-Number(m.qty||0));
+  const keys = new Set([...Object.keys(want), ...Object.keys(have)]);
+  return [...keys].some(k=>Math.abs((want[k]||0)-(have[k]||0))>1e-9);
+}
 /* Einkaufsmenge einer berechneten Zeile von Hand setzen (0 = von der Liste nehmen) */
 function ekSetBuy(id, artId, qty){
   let l = ekListOf(id).find(x=>x.list==='set' && x.articleId===artId);
@@ -1809,8 +1866,20 @@ function ekLearn(l){
   if(!l.desc || !l.articleId || l.articleId==='skip' || !S.articles[l.articleId]) return;
   const k='t:'+normText(l.desc); put('rules',{id:k, articleId:l.articleId, factor:1, sample:l.desc, party:(ES.ekEvents[l.eventId]||{}).party||''});
 }
+/* „Aus Lager entnehmen“ (Wunsch Thomas): Ware wird für die Veranstaltung echt ausgebucht (movements mit ekId),
+   Leistungen (Geräte) werden nur für Veranstaltungen am selben Tag reserviert (e.took.res), sie kommen zurück.
+   Die eigene Entnahme zählt für die eigene Liste weiter als Lagerbestand, für alle anderen ist sie weg. */
+const ekTookMv = id => live('movements').filter(m=>m.ekId===id);
+function ekResOthers(id){
+  const e = ES.ekEvents[id], out = {};
+  for(const o of live('ekEvents')) if(o.id!==id && o.took && o.took.res && o.date===e.date)
+    for(const [aid,q] of Object.entries(o.took.res)) out[aid] = (out[aid]||0) + Number(q||0);
+  return out;
+}
 function ekCalc(id){
   const st = stockMap(); const fam = new Map();
+  for(const m of ekTookMv(id)) st[m.articleId] = (st[m.articleId]||0) - Number(m.qty||0);
+  const resO = ekResOthers(id);
   for(const l of ekLinesOf(id)){
     if(!ekSure(l) || l.articleId==='skip') continue;
     const a = S.articles[l.articleId]; const q = Number(l.qty)||0; if(!(q>0)) continue;
@@ -1826,8 +1895,20 @@ function ekCalc(id){
   for(const [key, f] of fam){
     const single = S.articles[key];
     const packs = kindOf(single)==='ware' ? packsFor(single) : [];
-    const avail = Math.max(0, st[single.id]||0) + packs.reduce((s,p)=>s+Math.max(0, st[p.pack.id]||0)*p.n, 0);
+    const svcRow = kindOf(single)==='leistung';
+    const avail = svcRow ? Math.max(0, Math.max(0, st[single.id]||0) - (resO[single.id]||0))
+      : Math.max(0, st[single.id]||0) + packs.reduce((s,p)=>s+Math.max(0, st[p.pack.id]||0)*p.n, 0);
     const missing = Math.round((f.need - avail)*1000)/1000;
+    // Entnahme planen: erst ganze Kästen, dann Einzelflaschen, notfalls einen weiteren Kasten anbrechen
+    const take = [];
+    if(!svcRow){
+      let rem = f.need; const order = f.pref ? [...packs].sort((x,y)=>(y.pack.id===f.pref.id)-(x.pack.id===f.pref.id)) : packs;
+      const left = {};
+      for(const p of order){ const have=Math.floor(Math.max(0, st[p.pack.id]||0)); const k=Math.min(have, Math.floor(rem/p.n + 1e-9)); left[p.pack.id]=have-k; if(k){ take.push({id:p.pack.id, qty:k}); rem = Math.round((rem-k*p.n)*1000)/1000; } }
+      const sg = Math.min(Math.max(0, st[single.id]||0), rem); if(sg>0){ take.push({id:single.id, qty:Math.round(sg*1000)/1000}); rem = Math.round((rem-sg)*1000)/1000; }
+      for(const p of order){ while(rem>0 && left[p.pack.id]>0){ left[p.pack.id]--; rem=Math.max(0, rem-p.n); const t=take.find(x=>x.id===p.pack.id); if(t) t.qty++; else take.push({id:p.pack.id, qty:1}); } }
+    }
+    const res = svcRow ? Math.min(f.need, avail) : 0;
     const pk = f.pref ? packs.find(p=>p.pack.id===f.pref.id) || packs[0] : packs[0];
     let buy=0, buyArt=single;
     if(missing>0){ if(pk){ buy = Math.ceil(missing/pk.n - 1e-9); buyArt = pk.pack; } else buy = Math.ceil(missing - 1e-9); }
@@ -1836,7 +1917,7 @@ function ekCalc(id){
     const needArt = inPacks ? pk.pack : single, needQty = inPacks ? f.need/pk.n : f.need;
     const art = buy ? buyArt : (inPacks ? pk.pack : single);
     rows.push({art, cat: (f.pref||single).category||'ohne Gruppe', need: needQty, needText: `${fmt(needQty,3)} ${uL(needArt, needQty)}`.trim(),
-      buy, calc: buy, unit: buy ? uL(art, buy) : '', avail, svc: kindOf(single)==='leistung'});
+      buy, calc: buy, unit: buy ? uL(art, buy) : '', avail, svc: svcRow, take, res, famId: single.id, famIds: [single.id, ...packs.map(p=>p.pack.id)]});
   }
   // Von Hand: Menge geändert (set) oder Position ergänzt (add)
   for(const l of ekListOf(id)){
@@ -2042,7 +2123,11 @@ function vEkEvent(){
     </div>
     <div class="panel stack">
       <div class="row spread"><h2>Einkaufsliste</h2>
-        <button class="btn primary" data-act="ekPdf" ${c.buyRows.length?'':'disabled'}>PDF erstellen</button></div>
+        <div class="row" style="gap:8px">${e.took ? `<button class="btn" data-act="ekUntake" data-confirm="Entnahme zurücknehmen?">Entnahme zurücknehmen</button>`
+          : `<button class="btn" data-act="ekTake" ${lines.length?'':'disabled'} data-confirm="Jetzt aus dem Lager ausbuchen?">Aus Lager entnehmen</button>`}
+        <button class="btn primary" data-act="ekPdf" ${c.buyRows.length?'':'disabled'}>PDF erstellen</button></div></div>
+      ${e.took ? `<div class="note ok-note">Aus dem Lager entnommen am ${new Date(e.took.at).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}. Andere Veranstaltungen rechnen ohne diese Mengen.${ekTakeDiff(e.id, c)?' <b>Der Bedarf hat sich seitdem geändert:</b> Entnahme zurücknehmen und neu entnehmen.':''}</div>` : ''}
+      ${ekOtherTookHtml(e.id, c)}
       ${c.open?`<div class="note">${c.open} Position${c.open>1?'en sind':' ist'} noch nicht zugeordnet und fehlt in der Rechnung.</div>`:''}
       ${groups.length ? groups.map((g,i)=>`${i===0||groups[i-1].sec!==g.sec?`${i?'<hr class="ek-sep">':''}<h3 class="ek-sec">${g.sec==='ware'?'Waren':'Leistungen'}</h3>`:''}
         <div><div class="eyebrow" style="margin:6px 0 4px">${esc(g.cat)}</div><div class="ek-buy">
@@ -2057,6 +2142,17 @@ function vEkEvent(){
   </div>`;
 }
 
+/* Hinweis: Was andere Veranstaltungen von den hier gebrauchten Artikeln schon entnommen bzw. reserviert haben */
+function ekOtherTookHtml(id, c){
+  const e = ES.ekEvents[id], ids = new Set(c.rows.flatMap(r=>r.famIds||[])), out = [];
+  for(const o of live('ekEvents')){ if(o.id===id) continue;
+    const per = {}; ekTookMv(o.id).filter(m=>ids.has(m.articleId)).forEach(m=>per[m.articleId]=(per[m.articleId]||0)-Number(m.qty||0));
+    if(o.took && o.took.res && o.date===e.date) Object.entries(o.took.res).filter(([a])=>ids.has(a)).forEach(([a,q])=>per[a]=(per[a]||0)+Number(q));
+    const parts = Object.entries(per).filter(([,q])=>q>0).map(([a,q])=>`${fmt(q,3)} ${esc(uL(S.articles[a],q))} ${esc(S.articles[a]?.name||'')}`);
+    if(parts.length) out.push(`<div class="small muted">Für <b>${esc(o.name)}</b> (${dDE(o.date)}) schon entnommen: ${parts.join(', ')}</div>`);
+  }
+  return out.join('');
+}
 /* Einkaufsliste als PDF (jsPDF, Standardschrift mit Umlauten). Spalten: Artikel, Bedarf, Einkaufen, Einheit, Abhaken. */
 async function ekPdf(id){
   const e = ES.ekEvents[id], c = ekCalc(id);
@@ -2101,6 +2197,142 @@ async function ekPdf(id){
   if(DBX.connected){ try{ await DBX.upload(P('Einkauf/'+fname), blob, 'overwrite'); where = `Abgelegt in Dropbox: Einkauf/${fname}`; }catch(err){ where = 'Dropbox-Ablage fehlgeschlagen: '+err.message; } }
   ekPdfOut = {id, file, url: URL.createObjectURL(blob), where, share: !!(navigator.canShare && navigator.canShare({files:[file]}))};
   return ekPdfOut;
+}
+
+/* ===================== Packliste ===================== */
+/* Packliste je Veranstaltung (dieselben Veranstaltungen wie Einkauf): alle Angebotspositionen in voller Menge
+   (ohne Pauschalen/Stunden) plus die Artikel ihrer Produktgruppen (Menge je Einheit × Angebotsmenge).
+   Von Hand änderbar (ekLines list:'pkset' / 'pkadd'), abhakbar (ekLines list:'pkcheck', feste ID je Zeile, damit
+   mehrere Geräte gleichzeitig abhaken können). Bucht nichts. */
+let pkId = null, pkPdfOut = null;
+function pkCalc(id){
+  const map = new Map();
+  const add = (a, q, from) => { if(!a || a.deleted || !(q>0)) return; let r = map.get(a.id);
+    if(!r){ r = {key:a.id, art:a, qty:0, from:new Set()}; map.set(a.id, r); }
+    r.qty = Math.round((r.qty+q)*1000)/1000; if(from) r.from.add(from); };
+  for(const l of ekLinesOf(id)){
+    if(!ekSure(l) || l.articleId==='skip') continue;
+    const a = S.articles[l.articleId], q = Number(l.qty)||0; if(!(q>0)) continue;
+    if(!(kindOf(a)==='leistung' && EK_SKIP_UNITS.test(l.unit||''))) add(a, q, null);
+    for(const {m, qty} of pgMembers(a.id)) add(m, q*qty, a.name);   // auch bei Pauschalen (z. B. Gastro Equipment)
+  }
+  const rows = [...map.values()].map(r=>({...r, calc:r.qty}));
+  for(const l of ekAllOf(id).filter(x=>x.list==='pkset')){ const r = rows.find(x=>x.key===l.articleId); if(r){ r.qty = Math.max(0, Number(l.qty)||0); r.setId = l.id; } }
+  for(const l of ekAllOf(id).filter(x=>x.list==='pkadd').sort((x,y)=>(x.pos||0)-(y.pos||0))){
+    const a = S.articles[l.articleId];
+    rows.push({key:l.id, art: a || {id:'', name:l.name||''}, qty:Number(l.qty)||0, from:new Set(), addId:l.id, line:l, calc:0}); }
+  const checks = {}; ekAllOf(id).filter(x=>x.list==='pkcheck').forEach(x=>checks[x.key]=!!x.on);
+  rows.forEach(r=>{ const a = r.art.id ? S.articles[r.art.id] : null;
+    r.sec = a && kindOf(a)==='leistung' ? 'leistung' : 'ware'; r.cat = r.addId ? 'Zusätzlich' : (a.category||'ohne Gruppe');
+    r.unit = r.addId && r.line.unit ? r.line.unit : (a ? uL(a, r.qty) : ''); r.on = !!checks[r.key]; });
+  rows.sort((x,y)=>(x.sec==='leistung')-(y.sec==='leistung')||(x.cat==='Zusätzlich')-(y.cat==='Zusätzlich')||x.cat.localeCompare(y.cat,'de')||(x.addId?(x.line.pos||0)-(y.line.pos||0):x.art.name.localeCompare(y.art.name,'de')));
+  const list = rows.filter(r=>r.qty>0 && (r.art.name||'').trim());
+  return {rows, list, removed: rows.filter(r=>r.setId && !r.qty), done: list.filter(r=>r.on).length, open: ekOpenCount(id)};
+}
+function pkSet(id, artId, qty){
+  let l = ekAllOf(id).find(x=>x.list==='pkset' && x.articleId===artId);
+  if(!l) l = {id:uid(), eventId:id, list:'pkset', articleId:artId, desc:'', unit:'', how:'manuell', src:'packliste', pos:0};
+  l.qty = qty; put('ekLines', l); persist();
+}
+function pkCheck(id, key, on){
+  const cid = 'pk|'+id+'|'+key;   // feste ID: zwei Geräte haken dieselbe Zeile, kein Doppel
+  const l = ES.ekLines[cid] || {id:cid, eventId:id, list:'pkcheck', key, desc:'', qty:0, unit:'', articleId:'', how:'', src:'packliste', pos:0};
+  l.on = on; l.deleted = false; put('ekLines', l); persist();
+}
+function vPackliste(){
+  const evs = live('ekEvents').sort((a,b)=>(a.date||'').localeCompare(b.date||'')||a.name.localeCompare(b.name));
+  const up = evs.filter(e=>(e.date||'')>=today()), past = evs.filter(e=>(e.date||'')<today()).reverse();
+  const card = e => { const c = pkCalc(e.id);
+    const pill = c.open ? `<span class="pill warn">${c.open} zuordnen</span>` : !c.list.length ? '<span class="pill">leer</span>'
+      : c.done===c.list.length ? '<span class="pill ok">fertig gepackt</span>' : `<span class="pill">${c.done} / ${c.list.length} gepackt</span>`;
+    return `<button class="item-card" data-act="pkOpen" data-id="${e.id}"><span><b>${esc(e.name)}</b><br><span class="small muted">${dWD(e.date)}${e.party&&e.party!==e.name?' · '+esc(e.party):''} · ${c.list.length} Pos.</span></span>${pill}</button>`; };
+  return `<div class="stack">
+    <div><div class="eyebrow">Was muss mit?</div><h1>Packliste</h1></div>
+    <p class="small muted" style="margin:0">Dieselben Veranstaltungen wie unter Einkauf. Angebote und neue Veranstaltungen dort anlegen.</p>
+    <div class="stack" style="gap:8px">${up.map(card).join('') || '<div class="panel empty">Keine kommenden Veranstaltungen. Unter <a href="#" data-go="einkauf">Einkauf</a> anlegen.</div>'}</div>
+    ${past.length?`<details class="grp"><summary><span class="grp-h">Vergangene</span><span class="small muted num">${past.length}</span></summary><div class="stack" style="gap:8px;padding:10px">${past.map(card).join('')}</div></details>`:''}
+  </div>`;
+}
+function vPkEvent(){
+  const e = ES.ekEvents[pkId];
+  if(!e || e.deleted){ view='packliste'; return vPackliste(); }
+  ekOptCache = null;
+  const c = pkCalc(e.id);
+  const shown = c.rows.filter(r=>r.qty>0 || r.addId);
+  const groups = []; for(const r of shown){ const g=groups.find(x=>x.cat===r.cat && x.sec===r.sec); if(g) g.rows.push(r); else groups.push({cat:r.cat, sec:r.sec, rows:[r]}); }
+  const row = r => r.addId
+    ? `<div class="pk-row add ${r.on?'on':''}"><input type="checkbox" data-pkc="${r.key}" ${r.on?'checked':''} aria-label="gepackt">
+        <div class="ek-bname"><select data-pka="articleId" data-id="${r.addId}" aria-label="Lagerartikel"><option value="">— eigener Text —</option>${ekOptCache===null?(ekOptions(''),ekOptCache):ekOptCache}</select>
+        ${S.articles[r.line.articleId]?'':`<input data-pka="name" data-id="${r.addId}" value="${esc(r.line.name||'')}" placeholder="Was muss mit?">`}</div>
+        <input class="ek-bqty" data-pka="qty" data-id="${r.addId}" inputmode="decimal" value="${r.qty?fmt(r.qty,3):''}" placeholder="Menge" aria-label="Menge">
+        <input class="ek-bunit" data-pka="unit" data-id="${r.addId}" value="${esc(r.line.unit||'')}" placeholder="${esc(r.unit||'Einheit')}" aria-label="Einheit">
+        <button class="btn sm danger" data-act="pkDelLine" data-id="${r.addId}" aria-label="Position entfernen">✕</button></div>`.replace(`value="${r.line.articleId}"`, r.line.articleId?`value="${r.line.articleId}" selected`:'value=""')
+    : `<div class="pk-row ${r.on?'on':''}"><input type="checkbox" data-pkc="${r.key}" ${r.on?'checked':''} aria-label="gepackt">
+        <div class="ek-bname">${esc(r.art.name)}${r.setId?' <span class="pill warn">geändert</span>':''}${r.from.size?`<br><span class="small muted">für ${[...r.from].map(esc).join(', ')}</span>`:''}</div>
+        <input class="ek-bqty" data-pkq="${r.key}" inputmode="decimal" value="${fmt(r.qty,3)}" aria-label="Menge">
+        <span class="ek-bunit small">${esc(r.unit)}</span>
+        ${r.setId?`<button class="btn sm" data-act="pkReset" data-id="${r.setId}" aria-label="Zurück zur berechneten Menge">↺</button>`:`<button class="btn sm danger" data-act="pkRemove" data-art="${r.key}" aria-label="Von der Liste nehmen">✕</button>`}</div>`;
+  return `<div class="stack">
+    <div><a href="#" data-go="packliste" class="back"><span aria-hidden="true">‹</span> Alle Veranstaltungen</a></div>
+    <div><div class="eyebrow">${dWD(e.date)}${e.offerNo?' · Angebot '+esc(e.offerNo):''}</div><h1>${esc(e.name)}</h1></div>
+    ${c.open?`<div class="note">${c.open} Angebotsposition${c.open>1?'en sind':' ist'} noch nicht zugeordnet und fehlt hier. Zuordnen unter <a href="#" data-act="ekOpen" data-id="${e.id}">Einkauf</a>.</div>`:''}
+    <div class="panel stack">
+      <div class="row spread"><h2>Packliste · ${c.done} / ${c.list.length} gepackt</h2>
+        <button class="btn primary" data-act="pkPdf" ${c.list.length?'':'disabled'}>PDF erstellen</button></div>
+      ${groups.length ? groups.map((g,i)=>`${i===0||groups[i-1].sec!==g.sec?`${i?'<hr class="ek-sep">':''}<h3 class="ek-sec">${g.sec==='ware'?'Waren':'Leistungen'}</h3>`:''}
+        <div><div class="eyebrow" style="margin:6px 0 4px">${esc(g.cat)}</div><div class="ek-buy">${g.rows.map(row).join('')}</div></div>`).join('')
+        : '<div class="small muted">Noch nichts auf der Packliste. Positionen kommen aus dem Angebot (unter Einkauf) oder von Hand.</div>'}
+      ${c.removed.length?`<div class="small muted">Von der Liste genommen: ${c.removed.map(r=>`${esc(r.art.name)} <button class="btn sm" data-act="pkReset" data-id="${r.setId}">wieder aufnehmen</button>`).join(' · ')}</div>`:''}
+      <div class="row"><button class="btn sm" data-act="pkAdd">+ Position zur Packliste</button></div>
+      ${pkPdfOut && pkPdfOut.id===e.id ? `<div class="row" style="gap:8px"><span class="small muted">${esc(pkPdfOut.where)}</span>
+        ${pkPdfOut.share?'<button class="btn sm" data-act="pkShare">Teilen</button>':''}<button class="btn sm" data-act="pkDownload">Herunterladen</button></div>`:''}
+    </div>
+  </div>`;
+}
+async function pkPdf(id){
+  const e = ES.ekEvents[id], c = pkCalc(id);
+  await loadScript(JSPDF);
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
+  const L=15, R=195; let y=18;
+  const cols = {art:L, qty:150, unit:154, box:R-5};
+  const head = () => { doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(90);
+    doc.text('Artikel', cols.art, y); doc.text('Menge', cols.qty, y, {align:'right'}); doc.text('Einheit', cols.unit, y); doc.text('gepackt', R, y, {align:'right'});
+    doc.setDrawColor(180); doc.line(L, y+1.5, R, y+1.5); doc.setTextColor(0); y+=6; };
+  const need = h => { if(y+h > 282){ doc.addPage(); y=18; head(); } };
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Packliste', L, y); y+=8;
+  doc.setFontSize(12); doc.text(e.name, L, y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text([dWD(e.date), e.party && e.party!==e.name ? e.party : '', e.offerNo ? 'Angebot '+e.offerNo : ''].filter(Boolean).join('  ·  '), L, y); y+=5;
+  doc.setTextColor(110); doc.text(`Erstellt ${new Date().toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}`, L, y); doc.setTextColor(0); y+=4;
+  if(c.open){ y+=3; doc.setTextColor(170,90,0); doc.text(`Achtung: ${c.open} Position${c.open>1?'en':''} aus dem Angebot noch nicht zugeordnet, nicht enthalten.`, L, y); doc.setTextColor(0); y+=2; }
+  y+=8; head();
+  let cat='', sec='';
+  for(const r of c.list){
+    if(r.sec!==sec){ need(24);
+      if(sec){ y+=3; doc.setDrawColor(40); doc.setLineWidth(0.6); doc.line(L, y-4, R, y-4); doc.setLineWidth(0.2); y+=4; }
+      sec=r.sec; cat=''; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(sec==='ware'?'Waren':'Leistungen', L, y); y+=6.5; }
+    if(r.cat!==cat){ need(14); cat=r.cat; y+=2; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(cat, L, y); y+=5.5; }
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const nameLines = doc.splitTextToSize(r.art.name, cols.qty - L - 22);
+    const sub = r.from.size ? doc.splitTextToSize('für '+[...r.from].join(', '), cols.qty - L - 22) : [];
+    const h = Math.max(7, nameLines.length*4.6 + sub.length*3.8 + 2.4); need(h);
+    doc.text(nameLines, cols.art, y);
+    if(sub.length){ doc.setFontSize(8); doc.setTextColor(110); doc.text(sub, cols.art, y + nameLines.length*4.6 - 0.6); doc.setTextColor(0); doc.setFontSize(10); }
+    doc.setFont('helvetica','bold'); doc.text(fmt(r.qty,3), cols.qty, y, {align:'right'}); doc.setFont('helvetica','normal');
+    doc.text(r.unit||'', cols.unit, y);
+    doc.setDrawColor(60); doc.rect(cols.box, y-3.6, 4.5, 4.5);
+    if(r.on){ doc.setFont('helvetica','bold'); doc.text('x', cols.box+1.2, y); doc.setFont('helvetica','normal'); }
+    doc.setDrawColor(225); doc.line(L, y+h-5.2, R, y+h-5.2);
+    y += h;
+  }
+  const n = doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(130); doc.text(`B&B · Packliste ${e.name} · Seite ${i} von ${n}`, L, 290); }
+  const blob = doc.output('blob');
+  const fname = `Packliste_${e.date}_${e.name.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').slice(0,60)}.pdf`;
+  const file = new File([blob], fname, {type:'application/pdf'});
+  let where = 'PDF erstellt.';
+  if(DBX.connected){ try{ await DBX.upload(P('Packlisten/'+fname), blob, 'overwrite'); where = `Abgelegt in Dropbox: Packlisten/${fname}`; }catch(err){ where = 'Dropbox-Ablage fehlgeschlagen: '+err.message; } }
+  pkPdfOut = {id, file, url: URL.createObjectURL(blob), where, share: !!(navigator.canShare && navigator.canShare({files:[file]}))};
 }
 
 /* ===================== Personal ===================== */
@@ -2717,7 +2949,7 @@ function vHome(){
     <div class="modules">
       <button class="module" data-go="lager">
         <b>Lager</b>
-        <span class="muted">Bestand, Einkauf, Belege, Buchungen und Inventur</span>
+        <span class="muted">Bestand, Einkauf und Packliste</span>
         ${open ? `<span class="tag">${open} neue${open>1?'':'r'} Beleg${open>1?'e':''}</span>` : ''}
       </button>
       <button class="module" data-go="personal">
@@ -2728,12 +2960,12 @@ function vHome(){
     </div>
   </div>`;
 }
-const VIEWS = {home:vHome, personal:vPersonal, pEvent:vPEvent, pPersonen:vPPersonen, anleitung:vAnleitung, bestand:vBestand, einkauf:vEinkauf, ekEvent:vEkEvent, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
+const VIEWS = {home:vHome, personal:vPersonal, pEvent:vPEvent, pPersonen:vPPersonen, anleitung:vAnleitung, bestand:vBestand, einkauf:vEinkauf, ekEvent:vEkEvent, packliste:vPackliste, pkEvent:vPkEvent, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
 function render(){
   const area = curArea = areaOf(view);
   document.body.dataset.area = area;
   $('#areaName').textContent = AREA_NAME[area];
-  const tab = view==='anleitung' ? 'setup' : view==='pEvent' ? 'personal' : view==='ekEvent' ? 'einkauf' : view;
+  const tab = ['anleitung','inventur','buchungen','belege'].includes(view) ? 'setup' : view==='pEvent' ? 'personal' : view==='ekEvent' ? 'einkauf' : view==='pkEvent' ? 'packliste' : view;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
@@ -2899,13 +3131,31 @@ document.addEventListener('click', async e=>{
     case 'toggleArt': openArt = openArt===id ? null : id; render(); break;
     case 'ekNew': ekAdding=true; render(); $('#ek-name')?.focus(); break;
     case 'ekCancelNew': ekAdding=false; render(); break;
+    case 'ekTake': ekTake(ekId); { const y=scrollY; render(); scrollTo(0,y); } break;
+    case 'ekUntake': ekUntake(ekId); { const y=scrollY; render(); scrollTo(0,y); } break;
+    case 'pgAdd': { const a=S.articles[id], nm=($('#pg-new-'+id).value||'').trim(), q=parseNum($('#pg-qty-'+id).value);
+      const g=live('articles').find(x=>sameName(x, nm));
+      if(!g){ toast('Kein Artikel mit diesem Namen. Die Produktgruppe heißt genau wie der Artikel im Angebot.'); return; }
+      if(g.id===a.id){ toast('Ein Artikel kann nicht seine eigene Produktgruppe sein.'); return; }
+      if(!(q>0)){ toast('Bitte eine Menge je Einheit eingeben.'); return; }
+      a.groups = {...(a.groups||{}), [g.id]:q}; put('articles', a); persist(); render(); toast(`${a.name} gehört jetzt zu „${g.name}“`); break; }
+    case 'pgDel': { const a=S.articles[id]; const gs={...(a.groups||{})}; delete gs[el.dataset.g]; a.groups=gs; put('articles', a); persist(); render(); break; }
+    case 'pkOpen': pkId=id; pkPdfOut=null; view='pkEvent'; render(); window.scrollTo(0,0); break;
+    case 'pkRemove': pkSet(pkId, el.dataset.art, 0); { const y=scrollY; render(); scrollTo(0,y); } break;
+    case 'pkReset': del('ekLines', id); persist(); { const y=scrollY; render(); scrollTo(0,y); } break;
+    case 'pkDelLine': del('ekLines', id); persist(); { const y=scrollY; render(); scrollTo(0,y); } break;
+    case 'pkAdd': { const n=ekAllOf(pkId).filter(x=>x.list==='pkadd').length; put('ekLines',{id:uid(), eventId:pkId, list:'pkadd', articleId:'', name:'', qty:1, unit:'', desc:'', how:'manuell', src:'packliste', pos:n+1}); persist(); render();
+      const ins=document.querySelectorAll('.pk-row.add input[data-pka="name"]'); ins[ins.length-1]?.focus(); break; }
+    case 'pkPdf': { el.disabled=true; el.textContent='PDF wird erstellt …'; try{ await pkPdf(pkId); }catch(err){ toast('PDF fehlgeschlagen: '+err.message); } render(); break; }
+    case 'pkShare': if(pkPdfOut) navigator.share({files:[pkPdfOut.file], title:pkPdfOut.file.name}).catch(()=>{}); break;
+    case 'pkDownload': if(pkPdfOut){ const a=document.createElement('a'); a.href=pkPdfOut.url; a.download=pkPdfOut.file.name; document.body.appendChild(a); a.click(); a.remove(); } break;
     case 'ekScan': if(!DBX.connected){ toast('Dropbox ist nicht verbunden.'); break; } if(ekScanning){ toast('Angebote werden gerade geprüft …'); break; } toast('Angebote werden geprüft …'); await sync(); scanOffers(true); break;
     case 'ekOpen': ekId=id; ekPdfOut=null; view='ekEvent'; render(); window.scrollTo(0,0); break;
     case 'ekAddLine': { const n=ekLinesOf(ekId).length; put('ekLines',{id:uid(), eventId:ekId, desc:'', qty:0, unit:'', articleId:'', how:'manuell', src:'manuell', pos:n+1}); persist(); render();
       const sels=document.querySelectorAll('.ek-line select'); sels[sels.length-1]?.focus(); break; }
     case 'ekDelLine': del('ekLines',id); persist(); render(); break;
     case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
-    case 'ekDel': del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht'); break;
+    case 'ekDel': ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht'); break;
     case 'ekReadOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const evId=ekId;
       inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …'); await ekIntoEvent(f, evId); render(); };
       inp.click(); break; }
@@ -3038,6 +3288,16 @@ document.addEventListener('change', e=>{
     if(t.dataset.ekl==='qty'){ const n=parseNum(t.value); l.qty = isNaN(n) ? 0 : n; }
     else { l.articleId=t.value; l.how = t.value==='skip' ? 'nicht berücksichtigt' : 'manuell'; ekLearn(l); }
     put('ekLines',l); persist(); const y=scrollY; render(); scrollTo(0,y); return; }
+  if(t.dataset.pkc){ pkCheck(pkId, t.dataset.pkc, t.checked); const y=scrollY; render(); scrollTo(0,y); return; }
+  if(t.dataset.pkq){ const v=t.value.trim();
+    if(v===''){ const l=ekAllOf(pkId).find(x=>x.list==='pkset' && x.articleId===t.dataset.pkq); if(l){ del('ekLines',l.id); persist(); } }
+    else { const n=parseNum(v); if(isNaN(n)){ t.value=''; return; } pkSet(pkId, t.dataset.pkq, n); }
+    const y=scrollY; render(); scrollTo(0,y); return; }
+  if(t.dataset.pka){ const l=ES.ekLines[t.dataset.id]; if(!l) return; const k=t.dataset.pka;
+    if(k==='qty'){ const n=parseNum(t.value); l.qty = isNaN(n) ? 0 : n; } else l[k]=t.value.trim();
+    put('ekLines',l); persist(); if(k==='articleId'||k==='qty'){ const y=scrollY; render(); scrollTo(0,y); } return; }
+  if(t.dataset.pgq){ const a=S.articles[t.dataset.id]; const n=parseNum(t.value); if(!(n>0)){ t.value=fmt(a.groups[t.dataset.pgq],3); return; }
+    a.groups={...a.groups, [t.dataset.pgq]:n}; put('articles',a); persist(); return; }
   if(t.dataset.ekbuy!==undefined && t.dataset.ekbuy){ const v=t.value.trim();
     if(v===''){ const l=ekListOf(ekId).find(x=>x.list==='set' && x.articleId===t.dataset.ekbuy); if(l){ del('ekLines',l.id); persist(); } }
     else { const n=parseNum(v); if(isNaN(n)){ t.value=''; return; } ekSetBuy(ekId, t.dataset.ekbuy, n); }
