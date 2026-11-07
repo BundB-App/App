@@ -90,3 +90,16 @@ test('CSV-Lieferliste', () => {
   assert.equal(r.items[0].qty, 6);
   assert.equal(r.items[0].price, 14.9);
 });
+
+test('Gebinde erkennen (Lager Etappe 2): nur mit Volumen, Maße zählen nicht', () => {
+  const Q = new Function(src + '\nreturn {packOf};')();
+  assert.deepEqual(Q.packOf('Bionade Holunder 12 x 0,33l'), {n:12, single:'Bionade Holunder 0,33l'});
+  assert.deepEqual(Q.packOf('Coca Cola Glas  24 x 0,33l'), {n:24, single:'Coca Cola Glas 0,33l'});
+  assert.deepEqual(Q.packOf('Margon Mineralwasser Classic 12 x 0,75l - Glas'), {n:12, single:'Margon Mineralwasser Classic 0,75l - Glas'});
+  assert.equal(Q.packOf('Bionade Holunder 0,33l'), null);
+  assert.equal(Q.packOf('Faltzelt 4,5x3m - weiß'), null);
+  assert.equal(Q.packOf('Festzeltgarnitur 2,2 x 0,5m'), null);
+  assert.equal(Q.packOf('GN Behälter 16x17x15cm (LxBxH)'), null);
+  assert.equal(Q.packOf('LED Stairville 18x3W 45° - Farblicht'), null);
+  assert.equal(Q.packOf('Radeberger Pilsner 10l Fass'), null);
+});

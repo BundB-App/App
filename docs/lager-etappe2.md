@@ -1,5 +1,14 @@
 # Lager Etappe 2 – echter Bestand und erweiterte Artikeldaten
 
+**Umgesetzt 2026-11-07.** Abweichungen nach dem Interview mit Thomas (gelten vor dem Text unten):
+
+- Dritter Typ **Mietware** (`kind:'miete'`): Geräte, kommen zurück, Ausgangsrechnung bucht nicht aus, immer sichtbar. Alle Leistungen in Eventausstattung * und Gastro Hardware sind Mietware, außer Gläserpauschale, Gastro Equipment, Kabelpauschale. Dazu Becher Mehrweg, Filterkaffeemaschine 1l, Cocktailglas, Fotobox, Brotkorb, Cocktaillöffel, Kaffeelöffel, Geschirrtuch. Auf Ware: Jim Beam, Deckel Kaffeebecher, Schwamm, Tischdecke Papier.
+- **Kasten anbrechen** ist doch drin: reicht der Flaschenbestand bei einem Abgang nicht, Kasten −1 und Flaschen +n.
+- **Nichts aus Bezeichnungen rechnen**: Faktor immer 1, `guessFactor` wird nicht mehr für Vorschläge genutzt.
+- **Leere Einheiten bleiben leer** (Thomas trägt sie in der App nach), nur 3 Gebinde → Kasten und Servietten braun → Stück.
+- **Tippfehler korrigiert** (Wassert, Gatronomie, 1ll, Schnapverschluss, Salatllöffel, Fleicherkiste, Kunstoff, Terassenheizer, „10 Fass“ → „10l Fass“); alter Name als `alias` für die Zuordnung von Rechnungen.
+- Leerer Bestand = 0. Liste umschaltbar nach Artikelgruppe oder Artikeltyp.
+
 Stand: 2026-11-07. Auftrag von Thomas: den echten Ist-Stand importieren, die Testdaten löschen und die App um die Spalten der Tabelle erweitern. Vorher `CLAUDE.md` lesen.
 
 ## Quelle

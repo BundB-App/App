@@ -104,6 +104,18 @@ label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .item .qty small{font:500 12px var(--f-body);color:var(--muted);margin-left:4px}
 .item.low{box-shadow:inset 4px 0 0 var(--warn)} .item.neg{box-shadow:inset 4px 0 0 var(--bad)}
 .detail{padding:4px 14px 16px;display:grid;gap:14px;background:var(--sunk);border-top:1px dashed var(--line)}
+details.grp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+details.grp>summary{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::before{content:'';flex:0 0 auto;width:7px;height:7px;margin:0 4px 0 2px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+details.grp[open]>summary::before{transform:rotate(45deg)}
+.inv-d:empty{display:none} .inv-d{margin-top:3px}
+details.grp>summary .grp-h{flex:1;font:700 18px/1.1 var(--f-display);letter-spacing:.02em}
+details.grp[open]>summary{border-bottom:1px solid var(--line)}
+details.grp .list{border:0;border-radius:0}
+details.grp .tbl{padding:0 10px 6px}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+textarea{font:inherit;width:100%;box-sizing:border-box;resize:vertical}
 .mv{display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:10px;padding:8px 0;border-top:1px solid var(--line);align-items:baseline}
 .mv:first-child{border-top:0}
 .plus{color:var(--good)} .minus{color:var(--bad)}
@@ -366,6 +378,13 @@ function guessFactor(desc){
   const m = String(desc).match(/(\d{1,3})\s*[x×]\s*\d/i);
   return m ? parseInt(m[1],10) : 1;
 }
+/* Getränke-Gebinde „Bionade Holunder 12 x 0,33l“ -> {n:12, single:'Bionade Holunder 0,33l'}, sonst null.
+   Nur mit Volumenangabe (l/ml/cl), damit Maße wie „Faltzelt 3x3m“ nicht als Gebinde gelten. */
+function packOf(name){
+  const m = String(name||'').match(/^(.*?)\s*\b(\d{1,3})\s*[x×]\s*(\d+(?:[,.]\d+)?\s*(?:ml|cl|l)l?\b.*)$/i);
+  if(!m) return null;
+  return {n:parseInt(m[2],10), single:(m[1]+' '+m[3]).replace(/\s+/g,' ').trim()};
+}
 /* Artikelname ohne Gebinde: "Elbtaler Pils Kiste 20x0,5l" -> "Elbtaler Pils 0,5l" */
 function cleanName(desc){
   return String(desc).replace(/\b(kiste|kisten|kasten|karton|ka|kt|tray|gebinde|pack|packung)\b/ig,' ')
@@ -601,6 +620,40 @@ function stockMap(){
 }
 const fmt = (n,d=2) => (Math.round(n*1000)/1000).toLocaleString('de-DE',{maximumFractionDigits:d});
 const eur = n => Number(n||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+
+/* Artikeltyp: ware (Ausgangsrechnung bucht aus), miete (Mietgerät, kommt zurück), leistung (Arbeit, Pauschale).
+   Fehlt kind (ältere Artikel), gilt ware. */
+const KINDS = {ware:'Ware', miete:'Mietware', leistung:'Leistung'};
+const kindOf = a => (a && KINDS[a.kind]) ? a.kind : 'ware';
+function kindFrom(s){ const t=normText(s); return /miet/.test(t) ? 'miete' : /leist|dienst/.test(t) ? 'leistung' : /ware|artikel|produkt/.test(t) ? 'ware' : ''; }
+/* Einheit passend zur Menge: 1 Flasche, 3 Flaschen. Fehlt die Mehrzahl, gilt die Einzahl. */
+const uL = (a, n) => !a ? '' : (Math.abs(Number(n))===1 ? (a.unit||'') : (a.unitPl||a.unit||''));
+/* Reine Leistung ohne Bestand (Aufbau, Porto …): in Bestand und Inventur standardmäßig ausgeblendet */
+const pureService = (a, st) => kindOf(a)==='leistung' && !(st[a.id]||0);
+const sameName = (a, s) => { const n=normText(s); return !!n && (normText(a.name)===n || (!!a.alias && normText(a.alias)===n)); };
+/* Kasten ↔ Einzelflasche über den Namen: „… 12 x 0,33l“ gehört zu „… 0,33l“ */
+function packLink(a){
+  const p = packOf(a.name); if(!p || kindOf(a)!=='ware') return null;
+  const single = live('articles').find(x=>x.id!==a.id && normText(x.name)===normText(p.single));
+  return single ? {n:p.n, single} : null;
+}
+function packsFor(single){ return live('articles').map(x=>({x, l:packLink(x)})).filter(o=>o.l && o.l.single.id===single.id).map(o=>({pack:o.x, n:o.l.n})); }
+/* Abgang von Einzelflaschen: reicht der Bestand nicht, werden Kästen angebrochen (Kasten −1, Flaschen +n).
+   Gibt die Anbruch-Buchungen zurück; die Entnahme selbst bucht der Aufrufer. */
+function openPacks(single, need, extra={}, st=stockMap()){
+  const out=[]; let have = st[single.id]||0;
+  if(kindOf(single)!=='ware' || have>=need) return out;
+  for(const {pack, n} of packsFor(single)){
+    let avail = Math.floor(st[pack.id]||0);
+    while(have<need && avail>0){
+      const g=uid();
+      out.push(put('movements',{id:uid(), articleId:pack.id, qty:-1, type:'manual', reason:'Kasten angebrochen', date:extra.date||today(), docId:extra.docId, note:`→ ${n} ${uL(single,n)||'×'} ${single.name}`, open:g}));
+      out.push(put('movements',{id:uid(), articleId:single.id, qty:n, type:'manual', reason:'Kasten angebrochen', date:extra.date||today(), docId:extra.docId, note:`aus ${pack.name}`, open:g}));
+      st[pack.id]=(st[pack.id]||0)-1; st[single.id]=(st[single.id]||0)+n; have+=n; avail--;
+    }
+  }
+  return out;
+}
 const dDE = s => s? s.split('-').reverse().join('.') : '';
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -879,11 +932,24 @@ async function readDocument(file, progress){
 function ruleKeys(line, party){ const k=[]; if(line.art) k.push('a:'+normText(party)+'|'+normText(line.art)); k.push('t:'+normText(line.desc)); return k; }
 function suggest(line, party){
   for(const k of ruleKeys(line,party)){ const r=S.rules[k]; if(r && !r.deleted && S.articles[r.articleId] && !S.articles[r.articleId].deleted) return {articleId:r.articleId, factor:r.factor, how:'Regel'}; }
-  const f = guessFactor(line.desc);
+  // Ausgangsrechnungen kommen aus demselben Programm wie der Artikelexport: gleicher Name hat Vorrang
+  const arts = live('articles');
+  const ex = arts.find(a=>sameName(a, line.desc));
+  if(ex) return {articleId:ex.id, factor:1, how:'exakt'};
+  // Ähnlich, aber nie Gebinde mit Einzelflasche verwechseln („… 12 x 1l“ ≠ „… 1l“).
+  // Faktor bleibt 1: Maße und Gebinde im Namen werden nicht verrechnet (Kasten bucht auf den Kasten-Artikel).
+  const pk = (packOf(line.desc)||{n:0}).n;
   let best=null, bs=0;
-  for(const a of live('articles')){ const s=similarity(line.desc,a.name); if(s>bs){bs=s;best=a;} }
-  if(best && bs>=0.8) return {articleId:best.id, factor: (line.unit && /fl|stk|glas/i.test(line.unit)) ? 1 : f, how:'ähnlich'};
-  return {articleId:'', factor:f, how:''};
+  for(const a of arts){ if((packOf(a.name)||{n:0}).n!==pk) continue; const s=similarity(line.desc,a.name); if(s>bs){bs=s;best=a;} }
+  if(best && bs>=0.8) return {articleId:best.id, factor:1, how:'ähnlich'};
+  return {articleId:'', factor:1, how:''};
+}
+/* Ausgangsrechnung: Mietware und Leistungen sind kein Lagerabgang und werden abgewählt (einschalten bleibt möglich) */
+function applyKind(l, direction){
+  const a = S.articles[l.articleId];
+  const ns = direction==='out' && !!a && !a.deleted && kindOf(a)!=='ware';
+  if(ns !== !!l.noStock) l.on = !ns;
+  l.noStock = ns;
 }
 
 let IMP = null;   // aktueller Beleg in Prüfung
@@ -900,7 +966,7 @@ async function buildImp(file, direction, dbxPath, progress){
   try{
     const r = await readDocument(file, progress||(()=>{}));
     const party = r.party || '';
-    const items = r.items.map(it=>{ const s=suggest(it, party); return {...it, on:true, articleId:s.articleId||'new', factor:s.factor, how:it.calc ? (s.how?s.how+' · ':'')+'Menge berechnet' : s.how}; });
+    const items = r.items.map(it=>{ const s=suggest(it, party); const l={...it, on:true, articleId:s.articleId||'new', factor:s.factor, how:it.calc ? (s.how?s.how+' · ':'')+'Menge berechnet' : s.how}; applyKind(l, direction); return l; });
     const imp = {dir:direction, fileName:file.name, file, dbxPath, source:r.source, raw:r.raw, number:r.number||'', date:r.date||today(), party, items, manual:false, reason:''};
     if(!items.length){ imp.manual=true; imp.reason='Es wurden keine Positionen erkannt.'; imp.items=[blankLine(),blankLine(),blankLine()]; }
     return imp;
@@ -932,27 +998,32 @@ async function bookImport(imp=IMP, silent=false){
   if(chosen.some(l=>!l.articleId)){ toast('Bitte jeder Position einen Lagerartikel zuordnen oder sie abwählen.'); return false; }
   if(chosen.some(l=>l.articleId==='new' && !l.desc.trim())){ toast('Für einen neuen Artikel fehlt die Bezeichnung.'); return false; }
   const lines = chosen;
-  if(!lines.length){ toast('Keine Position zum Buchen ausgewählt.'); return false; }
+  // Rechnung nur aus Mietware/Leistungen: ohne Lagerbuchung abschließen und ablegen
+  const svcOnly = !lines.length && imp.items.some(l=>l.noStock);
+  if(!lines.length && !svcOnly){ toast('Keine Position zum Buchen ausgewählt.'); return false; }
   const doc = put('docs',{id:uid(), dir:imp.dir, party:imp.party, number:imp.number, date:imp.date, source:imp.manual?'manuell zugeordnet':imp.source, file:'', lines:lines.length});
   const sign = imp.dir==='in' ? 1 : -1;
+  const st = stockMap(); let opened = 0;
   for(const l of lines){
     let aid = l.articleId;
     const f = Number(l.factor)||1;
     if(aid==='new'){
-      const nm = cleanName(l.desc) || l.desc;
-      const existing = live('articles').find(a=>normText(a.name)===normText(nm));
+      const nm = l.desc.trim();
+      const existing = live('articles').find(a=>sameName(a, nm));
       if(existing) aid = existing.id;
-      else aid = put('articles',{id:uid(), name:nm, unit: f!==1 ? 'Fl' : (l.unit||'Stk'), category:'', min:0, lastPrice:0}).id;
+      else aid = put('articles',{id:uid(), name:nm, unit:l.unit||'', unitPl:'', desc:'', kind:'ware', category:'', min:0, lastPrice:0}).id;
     }
-    const qty = Number(l.qty)*f*sign;
+    const qty = Math.round(Number(l.qty)*f*sign*1000)/1000;
+    if(qty<0) opened += openPacks(S.articles[aid], -qty, {date:imp.date, docId:doc.id}, st).length/2;
     put('movements',{id:uid(), articleId:aid, qty, type:imp.dir, date:imp.date, docId:doc.id, note:l.desc||S.articles[aid].name, price:Number(l.price)||0});
+    st[aid] = (st[aid]||0) + qty;
     if(imp.dir==='in' && l.price){ const a=S.articles[aid]; a.lastPrice = Number(l.price)/f; put('articles',a); }
     if(l.desc.trim()) for(const k of ruleKeys(l, imp.party)) put('rules',{id:k, articleId:aid, factor:f, sample:l.desc, party:imp.party});
   }
   persist();
   try{ doc.file = await archiveFile(imp); if(doc.file){ put('docs',doc); persist(); } }
   catch(e){ toast('Gebucht. Ablage in Dropbox fehlgeschlagen: '+e.message); }
-  if(!silent) toast(`${lines.length} Positionen gebucht`);
+  if(!silent) toast(svcOnly ? 'Beleg abgeschlossen, kein Lagerabgang (nur Mietware/Leistungen)' : `${lines.length} Positionen gebucht${opened?` · ${opened} Kasten angebrochen`:''}`);
   finishQueueItem(imp);
   return true;
 }
@@ -998,7 +1069,7 @@ async function runQueue(openFirst){
     q.status = q.imp.manual ? 'manual' : 'ready';
     q.msg = q.imp.manual ? 'manuell zuordnen' : `${q.imp.items.length} Positionen erkannt`;
     // Automatisch buchen, wenn alles über gelernte Regeln bekannt ist
-    if(CFG.autoBook && !q.imp.manual && q.imp.items.length && q.imp.items.every(l=>/Regel/.test(l.how)) && !duplicateDoc(q.imp)){
+    if(CFG.autoBook && !q.imp.manual && q.imp.items.length && q.imp.items.every(l=>/Regel|exakt/.test(l.how)) && !duplicateDoc(q.imp)){
       const ok = await bookImport(q.imp, true); if(ok){ booked++; continue; }
     }
     renderQueueOnly();
@@ -1044,8 +1115,8 @@ function qbListHtml(){
   const st=stockMap(); const q=normText(QB.q);
   let arts;
   if(!q){ const rec=recentArticleIds(); arts = rec.map(id=>S.articles[id]).concat(live('articles').filter(a=>!rec.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name))).slice(0,8); }
-  else arts = live('articles').filter(a=>normText(a.name+' '+(a.category||'')).includes(q)).sort((a,b)=>a.name.localeCompare(b.name)).slice(0,12);
-  let h = arts.map(a=>`<button class="qb-art" data-act="qbPick" data-id="${a.id}" aria-pressed="${QB.articleId===a.id}"><span>${esc(a.name)}</span><span class="num muted">${fmt(st[a.id]||0)} ${esc(a.unit)}</span></button>`).join('');
+  else arts = live('articles').filter(a=>normText(a.name+' '+(a.alias||'')+' '+(a.category||'')).includes(q)).sort((a,b)=>a.name.localeCompare(b.name)).slice(0,12);
+  let h = arts.map(a=>`<button class="qb-art" data-act="qbPick" data-id="${a.id}" aria-pressed="${QB.articleId===a.id}"><span>${esc(a.name)}</span><span class="num muted">${fmt(st[a.id]||0)} ${esc(uL(a,st[a.id]||0))}</span></button>`).join('');
   if(q && !arts.length) h += `<button class="qb-art" data-act="qbNew"><span>„${esc(QB.q.trim())}“ als neuen Artikel anlegen</span><span class="muted">+</span></button>`;
   return h || `<div class="small muted">Noch keine Artikel vorhanden.</div>`;
 }
@@ -1058,22 +1129,32 @@ function renderQB(){
     <div class="seg big" role="group" aria-label="Richtung">
       <button data-act="qbDir" data-qdir="-1" aria-pressed="${QB.dir===-1}">− Abgang</button>
       <button data-act="qbDir" data-qdir="1" aria-pressed="${QB.dir===1}">+ Zugang</button></div>
-    ${a ? `<div class="row spread panel" style="padding:10px 12px"><span><b>${esc(a.name)}</b><br><span class="small muted">Bestand ${fmt(st[a.id]||0)} ${esc(a.unit)}</span></span><button class="btn sm" data-act="qbChange">Ändern</button></div>`
+    ${a ? `<div class="row spread panel" style="padding:10px 12px"><span><b>${esc(a.name)}</b><br><span class="small muted">Bestand ${fmt(st[a.id]||0)} ${esc(uL(a,st[a.id]||0))}</span></span><button class="btn sm" data-act="qbChange">Ändern</button></div>`
         : `<label class="f">Artikel<input id="qb-q" type="search" placeholder="z. B. Cola" value="${esc(QB.q)}" autocomplete="off"></label><div class="qb-list" id="qb-list">${qbListHtml()}</div>`}
     <div class="stepper"><button data-act="qbStep" data-step="-1" aria-label="weniger">−</button>
       <input id="qb-qty" inputmode="decimal" value="${esc(QB.qty)}" aria-label="Menge"><button data-act="qbStep" data-step="1" aria-label="mehr">+</button></div>
     <div class="chips" role="group" aria-label="Grund">${QB_REASONS[String(QB.dir)].map(r=>`<button data-act="qbReason" data-r="${r}" aria-pressed="${QB.reason===r}">${r}</button>`).join('')}</div>
     <input id="qb-note" placeholder="Notiz (optional)" value="${esc(QB.note)}">
     <button class="btn primary" data-act="qbBook" style="justify-content:center;min-height:48px;font-size:16px" ${a?'':'disabled'}>
-      ${a ? `${QB.dir<0?'−':'+'} ${fmt(Number(QB.qty)||0)} ${esc(a.unit)} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt(after)}</span>` : 'Erst Artikel wählen'}</button>
+      ${a ? qbLabel(a) : 'Erst Artikel wählen'}</button>
   </div></div>`;
+}
+/* Knopftext: „− 5 Flaschen buchen → neu 7“, reicht der Bestand nicht und gibt es einen Kasten, mit Anbruch */
+function qbLabel(a){
+  const st=stockMap(), q=Number(QB.qty)||0, have=st[a.id]||0;
+  let after = have + QB.dir*q, hint='';
+  if(QB.dir<0 && have<q){ const tmp={...st}; let n=0, add=0;
+    for(const {pack,n:k} of packsFor(a)){ let av=Math.floor(tmp[pack.id]||0); while(have+add<q && av>0){ add+=k; av--; n++; } }
+    if(n){ after += add; hint=` · ${n} Kasten anbrechen`; } }
+  return `${QB.dir<0?'−':'+'} ${fmt(q)} ${esc(uL(a,q))} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt(after)}${hint}</span>`;
 }
 function qbBook(){
   const qty = Number(QB.qty)||0; const a=S.articles[QB.articleId];
   if(!a || !(qty>0)){ toast('Bitte Artikel und Menge angeben.'); return; }
+  const opened = QB.dir<0 ? openPacks(a, qty) : [];
   const mv = put('movements',{id:uid(), articleId:a.id, qty:qty*QB.dir, type:'manual', reason:QB.reason, date:today(), note:QB.note.trim()});
   persist(); qbClose(); render();
-  toast(`${QB_DIRTXT(mv.qty)} ${fmt(Math.abs(mv.qty))} ${a.unit} ${a.name} · ${mv.reason}`, {label:'Rückgängig', fn:()=>{ del('movements',mv.id); persist(); render(); toast('Buchung zurückgenommen'); }});
+  toast(`${QB_DIRTXT(mv.qty)} ${fmt(Math.abs(mv.qty))} ${uL(a,qty)} ${a.name} · ${mv.reason}${opened.length?` · ${opened.length/2} Kasten angebrochen`:''}`, {label:'Rückgängig', fn:()=>{ del('movements',mv.id); opened.forEach(m=>del('movements',m.id)); persist(); render(); toast('Buchung zurückgenommen'); }});
 }
 const QB_DIRTXT = q => q<0 ? '−' : '+';
 document.addEventListener('keydown', e=>{ if(tlDayId!=null && e.key==='Escape') tlClose(); if(pq && e.key==='Escape') pqClose(); if(QB && e.key==='Escape') qbClose(); if(QB && e.key==='Enter' && e.target.id==='qb-qty'){ e.preventDefault(); qbBook(); } });
@@ -1101,52 +1182,80 @@ function parseStockTable(rows){
   for(let i=0;i<Math.min(rows.length,15);i++){ const h=rows[i].map(normText); if(h.some(x=>/artikel|bezeichnung|^name|produkt/.test(x)) && h.some(x=>/bestand|menge|anzahl|stück|stueck|^ist/.test(x))){ hi=i; H=h; break; } }
   if(hi<0) return null;
   const find=(rx,not)=>H.findIndex(h=>rx.test(h) && !(not&&not.test(h)));
-  const c={ min:find(/mindest|^min/), name:find(/artikel|bezeichnung|^name|produkt/,/nr|nummer/), cat:find(/kategorie|gruppe|warengruppe/),
-    unit:find(/einheit|^me$/), price:find(/ek|einkauf|preis/) };
+  const c={ min:find(/mindest|^min/),
+    name:[find(/bezeichnung/,/zusätz|zusatz/), find(/^artikel$|^artikelname|^name|produkt/), find(/artikel/,/nr|nummer|gruppe|typ|art$/)].find(i=>i>=0) ?? -1,
+    cat:find(/kategorie|gruppe/), kind:find(/artikeltyp|^typ|^art$/),
+    unitPl:find(/mehrzahl|plural/), unit:find(/einheit|^me$/,/mehrzahl|plural/),
+    desc:find(/beschreibung|zusätz|zusatz|^notiz|^info/), alias:find(/rechnungsprogramm|zweitname|alias|alter name/),
+    price:find(/^ek|einkauf|preis/) };
   c.qty = H.findIndex((h,i)=>/bestand|menge|anzahl|stück|stueck|^ist/.test(h) && i!==c.min);
+  const g=(r,k)=>c[k]>=0 ? String(r[c[k]]??'').trim() : '';
   const out=[];
   for(const r of rows.slice(hi+1)){
-    const name=(r[c.name]||'').trim(); if(!name) continue;
-    const qty=parseNum(r[c.qty]);
-    out.push({name, cat:c.cat>=0?r[c.cat]:'', unit:c.unit>=0?r[c.unit]:'', qty:isNaN(qty)?null:qty,
+    const name=g(r,'name'); if(!name) continue;
+    const raw=g(r,'qty'); const qty=parseNum(raw);
+    out.push({name, cat:g(r,'cat'), unit:g(r,'unit'), unitPl:g(r,'unitPl'), desc:c.desc>=0 ? String(r[c.desc]??'').replace(/\r\n?/g,'\n').trim() : '',
+      kind:kindFrom(g(r,'kind')), alias:g(r,'alias'),
+      // leerer Bestand gilt als 0; Gleitkomma-Reste (12.200000000000001) auf 3 Stellen
+      qty: raw==='' ? 0 : isNaN(qty) ? null : Math.round(qty*1000)/1000, empty: raw==='',
       min:c.min>=0?parseNum(r[c.min]):NaN, price:c.price>=0?parseNum(r[c.price]):NaN});
   }
   return out;
 }
+const findArticle = it => live('articles').find(x=>sameName(x,it.name) || (it.alias && sameName(x,it.alias)));
 async function loadXl(file){
   try{
     const rows=await readTable(file); const items=parseStockTable(rows);
     if(!items||!items.length){ toast('Keine Spalten „Artikel“ und „Bestand“ gefunden. Vorlage verwenden.'); return; }
-    items.forEach(it=>{ const a=live('articles').find(x=>normText(x.name)===normText(it.name)); it.match=a?a.id:''; it.on = it.qty!==null; });
-    XL={rows:items, file:file.name}; render();
+    items.forEach(it=>{ const a=findArticle(it); it.match=a?a.id:''; it.on = it.qty!==null; });
+    const dm = file.name.match(/(\d{4})-(\d{2})-(\d{2})/);
+    XL={rows:items, file:file.name, date: dm ? dm[0] : today()}; render();
   }catch(e){ toast(e.message); }
 }
 function bookXl(){
-  const date=$('#xlDate')?.value||today(); const st=stockMap(); let nNew=0,nMv=0;
+  const date=$('#xlDate')?.value||today(); const st=stockMap(); let nNew=0,nMv=0,nUpd=0;
   for(const it of XL.rows){ if(!it.on) continue;
-    let a = it.match ? S.articles[it.match] : live('articles').find(x=>normText(x.name)===normText(it.name));
-    if(!a){ a=put('articles',{id:uid(), name:it.name, unit:it.unit||'Stk', category:it.cat||'', min:isNaN(it.min)?0:it.min, lastPrice:isNaN(it.price)?0:it.price}); nNew++; }
-    else { if(it.unit) a.unit=it.unit; if(it.cat) a.category=it.cat; if(!isNaN(it.min)) a.min=it.min; if(!isNaN(it.price)) a.lastPrice=it.price; put('articles',a); }
+    let a = it.match ? S.articles[it.match] : findArticle(it);
+    if(!a){ a=put('articles',{id:uid(), name:it.name, alias:it.alias||'', desc:it.desc, kind:it.kind||'ware', unit:it.unit, unitPl:it.unitPl, category:it.cat||'',
+      min:isNaN(it.min)?0:it.min, lastPrice:isNaN(it.price)?0:it.price}); nNew++; }
+    else {
+      // Wiederholter Import: nur gefüllte Zellen überschreiben, damit in der App nachgetragene Einheiten bleiben.
+      // Das Rechnungsprogramm kennt keine Mietware: „Leistung“ setzt Mietware nicht zurück.
+      const before=JSON.stringify(a);
+      for(const k of ['unit','unitPl','desc','alias']) if(it[k]) a[k]=it[k];
+      if(it.cat) a.category=it.cat;
+      if(it.kind && !(it.kind==='leistung' && kindOf(a)==='miete')) a.kind=it.kind;
+      if(!isNaN(it.min)) a.min=it.min; if(!isNaN(it.price)) a.lastPrice=it.price;
+      if(JSON.stringify(a)!==before){ put('articles',a); nUpd++; }
+    }
     const diff = Math.round(((it.qty||0)-(st[a.id]||0))*1000)/1000;
-    if(diff!==0){ put('movements',{id:uid(), articleId:a.id, qty:diff, type:'inv', date, note:'Anfangsbestand (Import)'}); nMv++; }
+    if(diff!==0){ put('movements',{id:uid(), articleId:a.id, qty:diff, type:'inv', date, note:it.match?'Bestand aus Excel':'Anfangsbestand (Import)'}); nMv++; }
   }
-  persist(); XL=null; view='bestand'; render(); toast(`Bestand übernommen: ${nNew} neue Artikel, ${nMv} Buchungen`);
+  persist(); XL=null; view='bestand'; render(); toast(`Bestand übernommen: ${nNew} neue Artikel, ${nUpd} aktualisiert, ${nMv} Buchungen`);
 }
 function vXl(){
   const st=stockMap(); const on=XL.rows.filter(r=>r.on).length;
+  const nNew=XL.rows.filter(r=>!r.match).length, nEmpty=XL.rows.filter(r=>r.empty).length;
+  const kinds=Object.keys(KINDS).map(k=>[k,XL.rows.filter(r=>(r.kind||'ware')===k).length]).filter(x=>x[1]);
   return `<div class="stack">
     <div><div class="eyebrow">${esc(XL.file)}</div><h1>Bestand übernehmen</h1></div>
-    <p class="muted" style="margin:0">Die App setzt den Bestand jedes Artikels auf den Wert aus der Tabelle. Fehlende Artikel werden angelegt.</p>
-    <div class="panel tbl"><table><thead><tr><th></th><th>Artikel</th><th>Kategorie</th><th class="r">Bestand neu</th><th class="r">bisher</th><th>Status</th></tr></thead><tbody>
-    ${XL.rows.map((r,i)=>`<tr><td><input type="checkbox" data-xl="${i}" ${r.on?'checked':''} ${r.qty===null?'disabled':''} aria-label="übernehmen"></td>
-      <td>${esc(r.name)}</td><td class="small muted">${esc(r.cat)}</td>
-      <td class="r num">${r.qty===null?'<span class="pill bad">fehlt</span>':fmt(r.qty)+' <span class="small muted">'+esc(r.unit)+'</span>'}</td>
-      <td class="r num muted">${r.match?fmt(st[r.match]||0):'–'}</td>
-      <td>${r.match?'<span class="pill">vorhanden</span>':'<span class="pill ok">neu</span>'}</td></tr>`).join('')}
-    </tbody></table></div>
-    <div class="row"><label class="f" style="width:170px">Stichtag<input type="date" id="xlDate" value="${today()}"></label>
+    <p class="muted" style="margin:0">Die App setzt den Bestand jedes Artikels auf den Wert aus der Tabelle. Fehlende Artikel werden angelegt, vorhandene aktualisiert (nur gefüllte Zellen).</p>
+    <div class="stats"><div class="stat"><span class="eyebrow">Zeilen</span><b class="num">${XL.rows.length}</b></div>
+      <div class="stat"><span class="eyebrow">Neu</span><b class="num">${nNew}</b></div>
+      ${kinds.map(([k,n])=>`<div class="stat"><span class="eyebrow">${KINDS[k]}</span><b class="num">${n}</b></div>`).join('')}</div>
+    ${nEmpty?`<div class="small muted">${nEmpty} Zeilen ohne Bestand werden mit 0 übernommen.</div>`:''}
+    <div class="row"><label class="f" style="width:170px">Stichtag<input type="date" id="xlDate" value="${esc(XL.date||today())}"></label>
       <button class="btn primary" data-act="xlBook" style="align-self:end">${on} Positionen übernehmen</button>
       <button class="btn" data-act="xlCancel" style="align-self:end">Abbrechen</button></div>
+    <div class="panel tbl"><table class="xl"><thead><tr><th></th><th>Artikel</th><th>Gruppe · Typ</th><th>Einheit</th><th class="r">Bestand neu</th><th class="r">bisher</th><th>Status</th></tr></thead><tbody>
+    ${XL.rows.map((r,i)=>`<tr><td><input type="checkbox" data-xl="${i}" ${r.on?'checked':''} ${r.qty===null?'disabled':''} aria-label="übernehmen"></td>
+      <td>${esc(r.name)}${r.alias?`<br><span class="small muted">Rechnung: ${esc(r.alias)}</span>`:''}${r.desc?`<br><span class="small muted clamp">${esc(r.desc)}</span>`:''}</td>
+      <td class="small"><span class="muted">${esc(r.cat||'–')}</span><br>${r.kind?`<span class="pill ${r.kind==='ware'?'ok':''}">${KINDS[r.kind]}</span>`:''}</td>
+      <td class="small">${r.unit?esc(r.unit)+(r.unitPl&&r.unitPl!==r.unit?' / '+esc(r.unitPl):''):'<span class="muted">–</span>'}</td>
+      <td class="r num">${r.qty===null?'<span class="pill bad">unlesbar</span>':fmt(r.qty,3)+(r.empty?' <span class="small muted">(leer)</span>':'')}</td>
+      <td class="r num muted">${r.match?fmt(st[r.match]||0,3):'–'}</td>
+      <td>${r.match?'<span class="pill">vorhanden</span>':'<span class="pill ok">neu</span>'}</td></tr>`).join('')}
+    </tbody></table></div>
   </div>`;
 }
 
@@ -1155,54 +1264,99 @@ let view = 'home';   // Beim Öffnen immer die Startseite mit Lager / Personal
 let openArt = null, search='', onlyLow=false, mvFilter='', addingArt=false;
 let invCounts = {};
 
+/* Liste gliedern nach Artikelgruppe oder Artikeltyp (Wunsch Thomas), Gruppen aufklappbar, Inhalt erst beim Aufklappen */
+let bKind='', showSvc=false, noUnit=false, invQ='';
+const bOpen=new Set(), invOpen=new Set(), GRP={b:{}, inv:{}};
+const groupBy = () => CFG.bGroup==='kind' ? 'kind' : 'cat';
+function groupArts(arts){
+  const by=groupBy(), m=new Map();
+  const key = a => by==='kind' ? kindOf(a) : (a.category||'ohne Gruppe');
+  arts.sort((x,y)=>(by==='kind'?(x.category||'~').localeCompare(y.category||'~'):0)||x.name.localeCompare(y.name,'de'));
+  for(const a of arts){ const k=key(a); if(!m.has(k)) m.set(k,[]); m.get(k).push(a); }
+  const order = by==='kind' ? Object.keys(KINDS) : [...m.keys()].sort((x,y)=>(x==='ohne Gruppe')-(y==='ohne Gruppe')||x.localeCompare(y,'de'));
+  return order.filter(k=>m.has(k)).map(k=>({k, label: by==='kind' ? KINDS[k] : k, arts:m.get(k)}));
+}
+function artMatch(a, q){ return !q || normText(a.name+' '+(a.alias||'')+' '+(a.category||'')+' '+(a.desc||'')).includes(q); }
+function listControls(id){
+  return `<div class="row"><input id="${id}" type="search" placeholder="Suchen (auch in der Beschreibung)" value="${esc(id==='search'?search:invQ)}" style="flex:1 1 220px">
+      <label class="f" style="flex:0 0 auto;width:auto"><select id="bGroup" aria-label="Gliedern nach"><option value="cat" ${groupBy()==='cat'?'selected':''}>nach Artikelgruppe</option><option value="kind" ${groupBy()==='kind'?'selected':''}>nach Artikeltyp</option></select></label></div>
+    <div class="row" style="gap:8px 14px">
+      <div class="seg" role="group" aria-label="Artikeltyp"><button data-act="bKind" data-k="" aria-pressed="${!bKind}">Alle</button>${Object.entries(KINDS).map(([k,l])=>`<button data-act="bKind" data-k="${k}" aria-pressed="${bKind===k}">${l}</button>`).join('')}</div>
+      ${id==='search'?`<label class="row small" style="gap:6px"><input type="checkbox" id="onlyLow" ${onlyLow?'checked':''}> nur Nachbestellen</label>
+      <label class="row small" style="gap:6px"><input type="checkbox" id="noUnit" ${noUnit?'checked':''}> ohne Einheit</label>`:''}
+      <label class="row small" style="gap:6px"><input type="checkbox" id="showSvc" ${showSvc?'checked':''}> Leistungen ohne Bestand zeigen</label>
+    </div>`;
+}
+function grpHtml(set, g, body, extra){
+  const forced = (set==='b'?search:invQ).trim()!=='';
+  const open = forced || (set==='b'?bOpen:invOpen).has(g.k);
+  GRP[set][g.k] = g.arts;
+  return `<details class="grp" data-set="${set}" data-g="${esc(g.k)}" ${open?'open':''} ${forced?'data-forced="1"':''}>
+    <summary><span class="grp-h">${esc(g.label)}</span><span class="small muted num grp-n">${extra}</span></summary>
+    <div class="grp-body">${open?body(g.arts):''}</div></details>`;
+}
+function bItems(arts){
+  const st=stockMap();
+  return `<div class="list">${arts.map(a=>{
+    const s = st[a.id]||0; const isLow = a.min>0 && s<=a.min; const neg = s<0; const k=kindOf(a);
+    const pill = neg ? '<span class="pill bad">negativ</span>' : isLow ? '<span class="pill warn">nachbestellen</span>' : k!=='ware' ? `<span class="pill">${KINDS[k]}</span>` : '';
+    const sub = groupBy()==='kind' ? (a.category||'ohne Gruppe') : '';
+    return `<div class="item ${neg?'neg':isLow?'low':''}">
+      <button class="head" data-act="toggleArt" data-id="${a.id}" aria-expanded="${openArt===a.id}">
+        <span><span class="name">${esc(a.name)}</span>${sub||a.min||!a.unit?`<br><span class="small muted">${[sub, a.min?`min. ${fmt(a.min)}`:'', !a.unit?'ohne Einheit':''].filter(Boolean).map(esc).join(' · ')}</span>`:''}</span>
+        ${pill||'<span></span>'}
+        <span class="qty num">${fmt(s,3)}<small>${esc(uL(a,s))}</small></span>
+      </button>
+      ${openArt===a.id ? artDetail(a, s) : ''}
+    </div>`; }).join('')}</div>`;
+}
 function vBestand(){
   const st = stockMap();
-  const arts = live('articles').sort((a,b)=>(a.category||'').localeCompare(b.category||'')||a.name.localeCompare(b.name));
-  const low = arts.filter(a=>(st[a.id]||0) < 0 || (a.min>0 && (st[a.id]||0) <= a.min));
-  const value = arts.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
+  const all = live('articles');
+  const low = all.filter(a=>(st[a.id]||0) < 0 || (a.min>0 && (st[a.id]||0) <= a.min));
+  const value = all.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
   const q = normText(search);
-  const shown = arts.filter(a=>(!q || normText(a.name+' '+(a.category||'')).includes(q)) && (!onlyLow || low.includes(a)));
+  const shown = all.filter(a=>artMatch(a,q) && (!onlyLow || low.includes(a)) && (!bKind || kindOf(a)===bKind) && (!noUnit || !a.unit)
+    && (showSvc || q || bKind==='leistung' || !pureService(a,st) || a.id===openArt));
+  const hidden = all.filter(a=>pureService(a,st)).length;
   let html = `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())}</div><h1>Bestand</h1></div>
       <button class="btn primary" data-act="addArt">+ Artikel</button></div>
     <div class="stats">
-      <div class="stat"><span class="eyebrow">Artikel</span><b class="num">${arts.length}</b></div>
+      <div class="stat"><span class="eyebrow">Artikel</span><b class="num">${all.length}</b></div>
       <div class="stat"><span class="eyebrow">Knapp</span><b class="num" style="color:${low.length?'var(--warn)':'inherit'}">${low.length}</b></div>
       <div class="stat"><span class="eyebrow">Lagerwert</span><b class="num">${eur(value).replace(/,\d\d\s/,' ')}</b></div>
     </div>`;
   if(addingArt) html += `<form class="panel stack" id="artForm">
       <h3>Neuer Artikel</h3>
       <div class="grid">
-        <label class="f">Bezeichnung<input id="na-name" required placeholder="z. B. Elbtaler Pils 0,5l"></label>
-        <label class="f">Einheit<input id="na-unit" value="Fl"></label>
-        <label class="f">Kategorie<input id="na-cat" placeholder="Bier, Wein, Alkoholfrei …"></label>
+        <label class="f">Bezeichnung<input id="na-name" required placeholder="z. B. Coca Cola 1l"></label>
+        <label class="f">Artikelgruppe<input id="na-cat" list="dl-cats" placeholder="z. B. Gastro Getränke"></label>
+        <label class="f">Artikeltyp<select id="na-kind">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label>
+        <label class="f">Einheit (Einzahl)<input id="na-unit" placeholder="Flasche"></label>
+        <label class="f">Einheit (Mehrzahl)<input id="na-unitpl" placeholder="Flaschen"></label>
         <label class="f">Mindestbestand<input id="na-min" inputmode="decimal" value="0"></label>
         <label class="f">Anfangsbestand<input id="na-start" inputmode="decimal" value="0"></label>
       </div>
+      <label class="f">Zusätzliche Beschreibung<textarea id="na-desc" rows="2"></textarea></label>
       <div class="row"><button class="btn primary" type="submit">Anlegen</button><button class="btn" type="button" data-act="cancelArt">Abbrechen</button></div>
     </form>`;
-  html += `<div class="row"><input id="search" type="search" placeholder="Artikel suchen" value="${esc(search)}" style="flex:1 1 220px">
-      <label class="row small" style="gap:6px"><input type="checkbox" id="onlyLow" ${onlyLow?'checked':''}> nur Nachbestellen</label></div>`;
-  if(!arts.length){
-    html += `<div class="panel empty"><h3 style="color:var(--ink)">Noch keine Artikel</h3><p>Lies unter <b>Belege</b> eine Lieferantenrechnung ein. Die Artikel werden dabei angelegt. Oder lege sie oben mit „+ Artikel“ an.</p>
-      <button class="btn primary" data-go="belege">Zu den Belegen</button></div>`;
+  html += listControls('search') + catList();
+  if(!all.length){
+    html += `<div class="panel empty"><h3 style="color:var(--ink)">Noch keine Artikel</h3><p>Lies unter <b>Inventur → Bestand aus Excel</b> die Artikelliste ein oder lege Artikel oben mit „+ Artikel“ an.</p>
+      <button class="btn primary" data-go="inventur">Zur Inventur</button></div>`;
   } else {
-    html += `<div class="list">` + (shown.map(a=>{
-      const s = st[a.id]||0; const isLow = a.min>0 && s<=a.min; const neg = s<0;
-      const pill = neg ? '<span class="pill bad">negativ</span>' : isLow ? '<span class="pill warn">nachbestellen</span>' : '';
-      return `<div class="item ${neg?'neg':isLow?'low':''}">
-        <button class="head" data-act="toggleArt" data-id="${a.id}" aria-expanded="${openArt===a.id}">
-          <span><span class="name">${esc(a.name)}</span><br><span class="small muted">${esc(a.category||'ohne Kategorie')}${a.min?` · min. ${fmt(a.min)}`:''}</span></span>
-          ${pill||'<span></span>'}
-          <span class="qty num">${fmt(s)}<small>${esc(a.unit||'')}</small></span>
-        </button>
-        ${openArt===a.id ? artDetail(a, s) : ''}
-      </div>`; }).join('') || `<div class="empty">Keine Treffer.</div>`) + `</div>`;
+    const groups = groupArts(shown);
+    html += groups.map(g=>{ const nl=g.arts.filter(a=>low.includes(a)).length;
+      return grpHtml('b', g, bItems, `${g.arts.length}${nl?` · <span style="color:var(--warn)">${nl} knapp</span>`:''}`); }).join('') || `<div class="panel empty">Keine Treffer.</div>`;
+    if(hidden && !showSvc && !q && bKind!=='leistung') html += `<p class="small muted" style="margin:0">${hidden} reine Leistungen ohne Bestand (Aufbau, Porto, Pauschalen …) sind ausgeblendet. Bei Belegen bleiben sie wählbar.</p>`;
   }
   return html + `</div>`;
 }
+const catList = () => `<datalist id="dl-cats">${[...new Set(live('articles').map(a=>a.category).filter(Boolean))].sort().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`;
 function artDetail(a, s){
   const mvs = live('movements').filter(m=>m.articleId===a.id).sort((x,y)=>(y.date||'').localeCompare(x.date||'')||y.updatedAt-x.updatedAt).slice(0,6);
+  const st = stockMap(); const pl = packLink(a); const packs = packsFor(a);
   return `<div class="detail">
     <div class="row" style="padding-top:10px">
       <input id="q-${a.id}" inputmode="decimal" placeholder="Menge" style="width:110px;flex:0 0 110px">
@@ -1210,13 +1364,21 @@ function artDetail(a, s){
       <button class="btn" data-act="quick" data-id="${a.id}" data-sign="-1">− Entnahme</button>
       <input id="qn-${a.id}" placeholder="Notiz (z. B. Event)" style="flex:1 1 160px">
     </div>
+    ${pl?`<div class="row spread small"><span>Enthält ${pl.n} × <b>${esc(pl.single.name)}</b> (Bestand ${fmt(st[pl.single.id]||0,3)})</span>
+      <button class="btn sm" data-act="openPack" data-id="${a.id}" ${s>=1?'':'disabled'}>1 Kasten anbrechen</button></div>`:''}
+    ${packs.length?`<div class="small muted">Reicht der Bestand bei einer Entnahme nicht, wird automatisch angebrochen: ${packs.map(p=>`${esc(p.pack.name)} (${fmt(st[p.pack.id]||0)})`).join(', ')}</div>`:''}
     <div class="grid">
       <label class="f">Bezeichnung<input data-edit="name" data-id="${a.id}" value="${esc(a.name)}"></label>
-      <label class="f">Einheit<input data-edit="unit" data-id="${a.id}" value="${esc(a.unit)}"></label>
-      <label class="f">Kategorie<input data-edit="category" data-id="${a.id}" value="${esc(a.category)}"></label>
+      <label class="f">Artikelgruppe<input data-edit="category" data-id="${a.id}" list="dl-cats" value="${esc(a.category)}"></label>
+      <label class="f">Artikeltyp<select data-edit="kind" data-id="${a.id}">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${kindOf(a)===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="f">Einheit (Einzahl)<input data-edit="unit" data-id="${a.id}" value="${esc(a.unit)}" placeholder="z. B. Flasche"></label>
+      <label class="f">Einheit (Mehrzahl)<input data-edit="unitPl" data-id="${a.id}" value="${esc(a.unitPl)}" placeholder="z. B. Flaschen"></label>
       <label class="f">Mindestbestand<input data-edit="min" data-id="${a.id}" inputmode="decimal" value="${fmt(a.min||0)}"></label>
       <label class="f">EK je ${esc(a.unit||'Einheit')}<input data-edit="lastPrice" data-id="${a.id}" inputmode="decimal" value="${fmt(a.lastPrice||0,4)}"></label>
+      <label class="f">Name auf Rechnungen (falls anders)<input data-edit="alias" data-id="${a.id}" value="${esc(a.alias)}" placeholder="–"></label>
     </div>
+    <label class="f">Zusätzliche Beschreibung<textarea data-edit="desc" data-id="${a.id}" rows="${Math.min(12, Math.max(2, String(a.desc||'').split('\n').length + Math.floor(String(a.desc||'').length/70)))}">${esc(a.desc)}</textarea></label>
+    <p class="small muted" style="margin:0">${kindOf(a)==='ware'?'Ware: Ausgangsrechnungen buchen sie aus.':'Ausgangsrechnungen buchen '+KINDS[kindOf(a)]+' nicht aus (im Beleg von Hand einschaltbar).'}</p>
     <div><div class="eyebrow" style="margin-bottom:4px">Letzte Buchungen</div>
       ${mvs.map(m=>mvRow(m,false)).join('') || '<div class="small muted">Noch keine Buchungen.</div>'}</div>
     <div class="row"><button class="btn sm danger" data-act="delArt" data-id="${a.id}" data-confirm="Artikel und Buchungen löschen?">Artikel löschen</button></div>
@@ -1281,19 +1443,26 @@ function previewHtml(){
   return `<details class="panel" ${IMP.manual?'open':''}><summary><b>Original anzeigen</b></summary><div style="margin-top:10px">${body}</div></details>`;
 }
 function vReview(){
-  const arts = live('articles').sort((a,b)=>a.name.localeCompare(b.name));
-  const dup = duplicateDoc();
+  const arts = live('articles').sort((a,b)=>(a.category||'~').localeCompare(b.category||'~')||a.name.localeCompare(b.name));
+  const dup = duplicateDoc(); const st = stockMap();
+  // Optionen einmal bauen (bis 400 Artikel), nach Artikelgruppe gegliedert
+  let og='', optHtml='';
+  for(const a of arts){ const c=a.category||'ohne Gruppe'; if(c!==og){ optHtml += (og?'</optgroup>':'')+`<optgroup label="${esc(c)}">`; og=c; }
+    optHtml += `<option value="${a.id}">${esc(a.name)}${a.unit?` (${esc(a.unit)})`:''}${kindOf(a)!=='ware'?' · '+KINDS[kindOf(a)]:''}</option>`; }
+  if(og) optHtml += '</optgroup>';
   const opts = sel => `<option value="" ${!sel?'selected':''} disabled>Artikel wählen …</option><option value="new" ${sel==='new'?'selected':''}>+ Neuer Artikel</option><option value="skip" ${sel==='skip'?'selected':''}>— nicht buchen —</option>` +
-    arts.map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${esc(a.name)} (${esc(a.unit)})</option>`).join('');
+    (sel && S.articles[sel] ? optHtml.replace(`value="${sel}"`, `value="${sel}" selected`) : optHtml);
   const lines = IMP.items.map((l,i)=>{
     const a = S.articles[l.articleId];
-    const unit = a ? a.unit : (Number(l.factor)!==1 ? 'Fl' : (l.unit||'Stk'));
     const res = (Number(l.qty)||0)*(Number(l.factor)||1);
+    const unit = a ? uL(a,res) : (l.unit||'');
+    const willOpen = a && IMP.dir==='out' && l.on && kindOf(a)==='ware' && (st[a.id]||0)<res && packsFor(a).some(p=>(st[p.pack.id]||0)>=1);
     return `<div class="line ${l.on?'':'off'}">
       <input type="checkbox" data-li="${i}" data-k="on" ${l.on?'checked':''} aria-label="Position übernehmen">
       <div class="stack" style="gap:8px;min-width:0">
         <div class="row" style="gap:6px"><input data-li="${i}" data-k="desc" value="${esc(l.desc)}" placeholder="Bezeichnung vom Beleg" style="flex:1 1 220px;font-weight:600">
-          ${l.art?`<span class="tag">${esc(l.art)}</span>`:''}${l.how?`<span class="pill ok">${esc(l.how)}</span>`:''}</div>
+          ${l.art?`<span class="tag">${esc(l.art)}</span>`:''}${l.how?`<span class="pill ok">${esc(l.how)}</span>`:''}${l.noStock?`<span class="pill">${KINDS[kindOf(a)]}, kein Lagerabgang</span>`:''}</div>
+        ${willOpen?`<div class="small muted">Bestand reicht nicht: Kasten wird angebrochen (Kasten −1, ${esc(a.unitPl||a.unit||'Flaschen')} +).</div>`:''}
         <div class="fields">
           <label class="f">Menge<input data-li="${i}" data-k="qty" inputmode="decimal" value="${l.qty?fmt(l.qty,3):''}" placeholder="0"></label>
           <label class="f">Einheit<input data-li="${i}" data-k="unit" value="${esc(l.unit)}"></label>
@@ -1330,7 +1499,7 @@ function vReview(){
     </div>
     </div>
     <p class="small muted" style="margin:0">Die Zuordnung wird gespeichert. Beim nächsten Beleg mit gleichem Text oder gleicher Artikelnummer schlägt die App denselben Lagerartikel und Faktor vor.</p>
-    <div class="row"><button class="btn primary" data-act="book">${IMP.dir==='in'?'Wareneingang buchen':'Warenausgang buchen'}</button>
+    <div class="row"><button class="btn primary" data-act="book">${!IMP.items.some(l=>l.on && l.articleId!=='skip' && Number(l.qty)) && IMP.items.some(l=>l.noStock) ? 'Beleg abschließen (kein Lagerabgang)' : IMP.dir==='in'?'Wareneingang buchen':'Warenausgang buchen'}</button>
       ${IMP.dbxPath?`<button class="btn" data-act="laterImp">Später</button>
       <button class="btn danger" data-act="archiveImp" data-confirm="Ohne Buchung ablegen?">Ohne Buchung ablegen</button>`:`<button class="btn" data-act="cancelImp">Verwerfen</button>`}</div>
     ${IMP.manual?'':previewHtml()}
@@ -1352,27 +1521,36 @@ function vBuchungen(){
   </div>`;
 }
 
+function invRows(arts){
+  const st=stockMap();
+  return `<div class="tbl"><table><thead><tr><th>Artikel</th><th class="r">Soll</th><th class="r">Ist · Diff.</th></tr></thead><tbody>${arts.map(a=>{
+    const soll=st[a.id]||0; const v=invCounts[a.id]; const has=v!==undefined && v!=='';
+    const diff = has ? parseNum(v)-soll : null;
+    return `<tr><td>${esc(a.name)}${groupBy()==='kind'?`<br><span class="small muted">${esc(a.category||'')}</span>`:''}</td>
+      <td class="r num">${fmt(soll,3)} <span class="muted small">${esc(uL(a,soll))}</span></td>
+      <td class="r"><input data-inv="${a.id}" inputmode="decimal" value="${esc(v??'')}" style="width:80px;text-align:right" placeholder="gezählt" aria-label="gezählt: ${esc(a.name)}">
+        <div class="num small inv-d" id="diff-${a.id}">${diff===null||isNaN(diff)?'':`<b class="${diff>=0?'plus':'minus'}">${diff>0?'+':''}${fmt(diff,3)}</b>`}</div></td></tr>`; }).join('')}</tbody></table></div>`;
+}
+const invCnt = arts => { const n=arts.filter(a=>invCounts[a.id]!==undefined && invCounts[a.id]!=='').length; return `${n?n+' / ':''}${arts.length}`; };
 function vInventur(){
   if(XL) return vXl();
   const st = stockMap();
-  const arts = live('articles').sort((a,b)=>(a.category||'').localeCompare(b.category||'')||a.name.localeCompare(b.name));
+  const all = live('articles');
   const importBox = `<div class="panel stack"><div class="row spread"><h2>Bestand aus Excel übernehmen</h2>
       <div class="row"><button class="btn" data-act="xlTemplate">Vorlage laden</button><button class="btn primary" data-act="xlPick">Excel/CSV wählen</button></div></div>
-      <p class="small muted" style="margin:0">Spalten: Artikel, Bestand, optional Kategorie, Einheit, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt.</p></div>`;
-  if(!arts.length) return `<div class="stack"><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
-  const rows = arts.map(a=>{ const soll=st[a.id]||0; const v=invCounts[a.id]; const has=v!==undefined && v!=='';
-    const diff = has ? parseNum(v)-soll : null;
-    return `<tr><td>${esc(a.name)}<br><span class="small muted">${esc(a.category||'')}</span></td>
-      <td class="r num">${fmt(soll)} <span class="muted small">${esc(a.unit)}</span></td>
-      <td class="r"><input data-inv="${a.id}" inputmode="decimal" value="${esc(v??'')}" style="width:96px;text-align:right" placeholder="gezählt"></td>
-      <td class="r num" id="diff-${a.id}">${diff===null||isNaN(diff)?'':`<b class="${diff>=0?'plus':'minus'}">${diff>0?'+':''}${fmt(diff)}</b>`}</td></tr>`; }).join('');
+      <p class="small muted" style="margin:0">Spalten: Bezeichnung, Bestand, optional Beschreibung, Artikelgruppe, Artikeltyp (Ware/Mietware/Leistung), Einheit Einzahl und Mehrzahl, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt, leere Zellen ändern nichts.</p></div>`;
+  if(!all.length) return `<div class="stack"><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
+  const q = normText(invQ);
+  const arts = all.filter(a=>artMatch(a,q) && (!bKind || kindOf(a)===bKind) && (showSvc || q || bKind==='leistung' || !pureService(a,st)));
+  const counted = Object.values(invCounts).filter(v=>v!==''&&v!=null).length;
   return `<div class="stack">
     <div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
     ${importBox}
-    <p class="muted" style="margin:0">Trage den gezählten Bestand ein. Leere Felder bleiben unverändert. Beim Buchen wird die Differenz als Inventurbuchung erfasst${DBX.connected?' und ein Protokoll im Ordner <code>Inventur</code> abgelegt':''}.</p>
-    <div class="panel tbl"><table><thead><tr><th>Artikel</th><th class="r">Soll</th><th class="r">Ist</th><th class="r">Differenz</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="row"><label class="f" style="width:170px">Stichtag<input type="date" id="invDate" value="${today()}"></label>
-      <button class="btn primary" data-act="bookInv" style="align-self:end">Differenzen buchen</button></div>
+    <p class="muted" style="margin:0">Trage den gezählten Bestand ein, auch Dezimalwerte wie 6,75 für angebrochene Flaschen. Leere Felder bleiben unverändert. Beim Buchen wird die Differenz als Inventurbuchung erfasst${DBX.connected?' und ein Protokoll im Ordner <code>Inventur</code> abgelegt':''}.</p>
+    ${listControls('invq')}
+    ${groupArts(arts).map(g=>grpHtml('inv', g, invRows, invCnt(g.arts))).join('') || '<div class="panel empty">Keine Treffer.</div>'}
+    <div class="row inv-foot"><label class="f" style="width:170px">Stichtag<input type="date" id="invDate" value="${today()}"></label>
+      <button class="btn primary" data-act="bookInv" style="align-self:end">Differenzen buchen${counted?` (${counted} gezählt)`:''}</button></div>
   </div>`;
 }
 
@@ -2239,7 +2417,7 @@ document.addEventListener('click', async e=>{
     case 'qbDir': QB.dir=Number(el.dataset.qdir); QB.reason=QB_REASONS[String(QB.dir)][0]; renderQB(); break;
     case 'qbPick': QB.articleId=id; renderQB(); $('#qb-qty')?.select(); break;
     case 'qbChange': QB.articleId=''; renderQB(); $('#qb-q')?.focus(); break;
-    case 'qbNew': { const nm=QB.q.trim(); const a=put('articles',{id:uid(), name:nm, unit:'Stk', category:'', min:0, lastPrice:0}); persist(); QB.articleId=a.id; renderQB(); toast(`Artikel „${nm}“ angelegt (Einheit Stk, unter Bestand änderbar)`); break; }
+    case 'qbNew': { const nm=QB.q.trim(); const a=put('articles',{id:uid(), name:nm, unit:'Stück', unitPl:'Stück', kind:'ware', desc:'', category:'', min:0, lastPrice:0}); persist(); QB.articleId=a.id; renderQB(); toast(`Artikel „${nm}“ angelegt (Einheit Stück, unter Bestand änderbar)`); break; }
     case 'qbStep': QB.qty=Math.max(0,(Number(QB.qty)||0)+Number(el.dataset.step)); renderQB(); break;
     case 'qbReason': QB.reason=el.dataset.r; renderQB(); break;
     case 'qbBook': qbBook(); break;
@@ -2319,7 +2497,8 @@ document.addEventListener('click', async e=>{
     case 'xlCancel': XL=null; render(); break;
     case 'xlBook': bookXl(); break;
     case 'xlTemplate': {
-      const csv='\uFEFF'+['Artikel;Kategorie;Einheit;Bestand;Mindestbestand;EK-Preis netto','Cola 0,33l;Alkoholfrei;Fl;48;24;0,70'].join('\r\n');
+      const csv='\uFEFF'+['Bezeichnung;Zusätzliche Beschreibung;Artikelgruppe;Artikeltyp;Einheit (Einzahl);Einheit (Mehrzahl);Bestand;Mindestbestand;EK-Preis netto',
+        'Coca Cola 1l;;Gastro Getränke;Ware;Flasche;Flaschen;48;24;0,70','Coca Cola 12 x 1l;;Gastro Getränke;Ware;Kasten;Kästen;4;;','Faltzelt 3x3m;Mit Seitenwänden;Eventausstattung Hardware;Mietware;Stück;Stück;2;;'].join('\r\n');
       const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='Vorlage_Lagerbestand.csv'; document.body.appendChild(a); a.click(); a.remove(); break; }
     case 'saveBase': {
       const v='/'+$('#cfg-base2').value.trim().replace(/^\/+|\/+$/g,''); if(v==='/'){ toast('Bitte einen Ordner angeben.'); return; }
@@ -2340,6 +2519,11 @@ document.addEventListener('click', async e=>{
     case 'addArt': addingArt=true; render(); $('#na-name')?.focus(); break;
     case 'cancelArt': addingArt=false; render(); break;
     case 'toggleArt': openArt = openArt===id ? null : id; render(); break;
+    case 'bKind': bKind=el.dataset.k||''; render(); break;
+    case 'openPack': { const a=S.articles[id], pl=a&&packLink(a); if(!pl || !((stockMap()[id]||0)>=1)) return;
+      const g=uid(), ms=[put('movements',{id:uid(), articleId:a.id, qty:-1, type:'manual', reason:'Kasten angebrochen', date:today(), note:`→ ${pl.n} ${uL(pl.single,pl.n)||'×'} ${pl.single.name}`, open:g}),
+        put('movements',{id:uid(), articleId:pl.single.id, qty:pl.n, type:'manual', reason:'Kasten angebrochen', date:today(), note:`aus ${a.name}`, open:g})];
+      persist(); render(); toast(`1 Kasten angebrochen: +${pl.n} ${pl.single.name}`, {label:'Rückgängig', fn:()=>{ ms.forEach(m=>del('movements',m.id)); persist(); render(); toast('Zurückgenommen'); }}); break; }
     case 'quick': {
       const v = parseNum($('#q-'+id).value); if(!(v>0)){ toast('Bitte eine Menge eingeben.'); return; }
       const note = $('#qn-'+id).value.trim();
@@ -2353,7 +2537,7 @@ document.addEventListener('click', async e=>{
     case 'queueOpen': { const q=QUEUE.find(x=>x.path===el.dataset.path); if(q&&q.imp){ IMP=q.imp; render(); window.scrollTo(0,0); } break; }
     case 'laterImp': IMP=null; render(); break;
     case 'archiveImp': { const imp=IMP; try{ await archiveFile(imp); toast('Beleg ohne Buchung abgelegt'); }catch(err){ toast('Ablage fehlgeschlagen: '+err.message); return; } finishQueueItem(imp); break; }
-    case 'impDir': IMP.dir=el.dataset.dir; render(); break;
+    case 'impDir': IMP.dir=el.dataset.dir; IMP.items.forEach(l=>applyKind(l, IMP.dir)); render(); break;
     case 'addLine': IMP.items.push(blankLine()); render(); break;
     case 'cancelImp': IMP=null; render(); break;
     case 'book': el.disabled=true; if(!(await bookImport())) el.disabled=false; break;
@@ -2391,7 +2575,7 @@ document.addEventListener('input', e=>{
   if(QB){
     if(t.id==='qb-q'){ QB.q=t.value; $('#qb-list').innerHTML=qbListHtml(); return; }
     if(t.id==='qb-qty'){ QB.qty=parseNum(t.value); if(isNaN(QB.qty)) QB.qty=0; const b=document.querySelector('[data-act=qbBook]'); const a=S.articles[QB.articleId];
-      if(b&&a){ const st=stockMap(); b.innerHTML=`${QB.dir<0?'−':'+'} ${fmt(QB.qty)} ${esc(a.unit)} buchen <span style="opacity:.75;font-weight:400">→ neu ${fmt((st[a.id]||0)+QB.dir*QB.qty)}</span>`; } return; }
+      if(b&&a) b.innerHTML=qbLabel(a); return; }
     if(t.id==='qb-note'){ QB.note=t.value; return; }
   }
   if(t.dataset.tpl){ const key=t.dataset.tpl; $('#prev-'+key).textContent=waFill(t.value||WA_TPL[key].def, WA_SAMPLE); return; }
@@ -2403,23 +2587,29 @@ document.addEventListener('input', e=>{
     if(t.id==='pq-rate'){ pq.rate=t.value; return; }
     if(/^pq-ev-/.test(t.id) && pq.newEv){ pq.newEv[t.id.slice(6)]=t.value; return; }
   }
-  if(t.id==='search'){ search=t.value; const pos=t.selectionStart; render(); const s=$('#search'); s.focus(); s.setSelectionRange(pos,pos); return; }
+  if(t.id==='search' || t.id==='invq'){ if(t.id==='search') search=t.value; else invQ=t.value; const id=t.id, pos=t.selectionStart; render(); const s=$('#'+id); if(s){ s.focus(); s.setSelectionRange(pos,pos); } return; }
   if(t.dataset.inv){ invCounts[t.dataset.inv]=t.value; const soll=stockMap()[t.dataset.inv]||0; const d=parseNum(t.value)-soll; const cell=$('#diff-'+t.dataset.inv);
-    cell.innerHTML = t.value===''||isNaN(d) ? '' : `<b class="${d>=0?'plus':'minus'}">${d>0?'+':''}${fmt(d)}</b>`; return; }
+    cell.innerHTML = t.value===''||isNaN(d) ? '' : `<b class="${d>=0?'plus':'minus'}">${d>0?'+':''}${fmt(d,3)}</b>`;
+    const g=t.closest('details.grp'); if(g){ const n=g.querySelector('.grp-n'); if(n) n.textContent=invCnt(GRP.inv[g.dataset.g]||[]); }
+    const c=Object.values(invCounts).filter(v=>v!==''&&v!=null).length, b=document.querySelector('[data-act=bookInv]'); if(b) b.textContent='Differenzen buchen'+(c?` (${c} gezählt)`:'');
+    return; }
   if(t.dataset.h && IMP){ IMP[t.dataset.h]=t.value; return; }
   if(t.dataset.li!==undefined && IMP){
     const l=IMP.items[+t.dataset.li], k=t.dataset.k;
     if(k==='on') return;
     l[k] = ['qty','price','factor'].includes(k) ? parseNum(t.value) : t.value;
     if(k==='qty'||k==='price'){ l.total=(Number(l.qty)||0)*(Number(l.price)||0); }
-    const a=S.articles[l.articleId]; const unit=a?a.unit:(Number(l.factor)!==1?'Fl':(l.unit||'Stk'));
-    const r=$('#res-'+t.dataset.li); if(r) r.textContent=`${IMP.dir==='in'?'+':'−'} ${fmt((Number(l.qty)||0)*(Number(l.factor)||1))} ${unit}`;
+    const a=S.articles[l.articleId]; const n=(Number(l.qty)||0)*(Number(l.factor)||1); const unit=a?uL(a,n):(l.unit||'');
+    const r=$('#res-'+t.dataset.li); if(r) r.textContent=`${IMP.dir==='in'?'+':'−'} ${fmt(n)} ${unit}`;
   }
 });
 document.addEventListener('change', e=>{
   const t=e.target;
   if(t.dataset.xl!==undefined && XL){ XL.rows[+t.dataset.xl].on=t.checked; render(); return; }
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
+  if(t.id==='noUnit'){ noUnit=t.checked; render(); return; }
+  if(t.id==='showSvc'){ showSvc=t.checked; render(); return; }
+  if(t.id==='bGroup'){ CFG.bGroup=t.value; saveCfg(); bOpen.clear(); invOpen.clear(); render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
   if(t.id==='cfg-auto'){ CFG.autoBook=t.checked; saveCfg(); return; }
@@ -2450,19 +2640,33 @@ document.addEventListener('change', e=>{
     // Einsätze dieser Schicht ziehen mit, solange ihre Planzeit noch der alten Schichtzeit entspricht
     asgOf(ev.id).filter(a=>a.shiftId===sh.id && a.planStart===old.start && a.planEnd===old.end).forEach(a=>{ a.planStart=sh.start; a.planEnd=sh.end; put('assignments',a); });
     persist(); return; }
-  if(t.dataset.edit){ const a=S.articles[t.dataset.id]; const k=t.dataset.edit; a[k] = ['min','lastPrice'].includes(k) ? (parseNum(t.value)||0) : t.value.trim(); put('articles',a); persist(); return; }
+  if(t.dataset.edit){ const a=S.articles[t.dataset.id]; const k=t.dataset.edit;
+    if(k==='name' && !t.value.trim()){ t.value=a.name; return; }
+    a[k] = ['min','lastPrice'].includes(k) ? (parseNum(t.value)||0) : k==='desc' ? t.value.replace(/\s+$/,'') : t.value.trim(); put('articles',a); persist();
+    // Gruppe/Typ/Name geändert: neu einsortieren, Gruppe des offenen Artikels bleibt offen
+    if(['name','category','kind'].includes(k)){ bOpen.add(groupBy()==='kind' ? kindOf(a) : (a.category||'ohne Gruppe')); render(); }
+    return; }
   if(t.dataset.li!==undefined && IMP){
     const l=IMP.items[+t.dataset.li], k=t.dataset.k;
     if(k==='on'){ l.on=t.checked; render(); return; }
-    if(k==='articleId'){ l.articleId=t.value; const a=S.articles[t.value]; if(a && /^(fl|stk|glas|l|kg)$/i.test(a.unit) && l.unit && !/kiste|kasten|karton|ka|kt|tray|pck|pack/i.test(l.unit)) l.factor=1; render(); }
+    if(k==='articleId'){ l.articleId=t.value; applyKind(l, IMP.dir); render(); }
   }
 });
+/* Gruppen in Bestand/Inventur: offen-Zustand merken, Inhalt erst beim ersten Aufklappen erzeugen (394 Artikel, iPhone) */
+document.addEventListener('toggle', e=>{
+  const d=e.target; if(!d.matches || !d.matches('details.grp') || d.dataset.forced) return;
+  const set = d.dataset.set==='inv' ? invOpen : bOpen, k=d.dataset.g;
+  if(d.open){ set.add(k); const b=d.querySelector('.grp-body'); if(b && !b.firstElementChild) b.innerHTML=(d.dataset.set==='inv'?invRows:bItems)(GRP[d.dataset.set][k]||[]); }
+  else set.delete(k);
+}, true);
 document.addEventListener('submit', e=>{
   if(e.target.id==='pEventForm'){ e.preventDefault(); savePEvent(e.target.dataset.id); return; }
   if(e.target.id==='pPersonForm'){ e.preventDefault(); savePPerson(e.target.dataset.id); return; }
   if(e.target.id!=='artForm') return; e.preventDefault();
   const name=$('#na-name').value.trim(); if(!name) return;
-  const a = put('articles',{id:uid(), name, unit:$('#na-unit').value.trim()||'Stk', category:$('#na-cat').value.trim(), min:parseNum($('#na-min').value)||0, lastPrice:0});
+  const a = put('articles',{id:uid(), name, unit:$('#na-unit').value.trim(), unitPl:$('#na-unitpl').value.trim(), kind:$('#na-kind').value, desc:$('#na-desc').value.trim(), alias:'',
+    category:$('#na-cat').value.trim(), min:parseNum($('#na-min').value)||0, lastPrice:0});
+  bOpen.add(groupBy()==='kind' ? kindOf(a) : (a.category||'ohne Gruppe')); openArt=a.id;
   const start=parseNum($('#na-start').value); if(start>0) put('movements',{id:uid(), articleId:a.id, qty:start, type:'manual', date:today(), note:'Anfangsbestand'});
   addingArt=false; persist(); render(); toast('Artikel angelegt');
 });
