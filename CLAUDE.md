@@ -39,12 +39,13 @@ Kein Build-Schritt, kein Framework. Alles liegt im Repository-Root und wird so a
    - Automatisch buchen nur, wenn alle Positionen über Regel oder exakten Namen bekannt sind.
 5. **Schnellbuchung** – Bottom-Sheet für Bruch/Schwund/Rückgabe usw., mit Rückgängig. Die Knöpfe „Schnell buchen“ (Lager und Personal) gibt es nur auf der Startseite (Wunsch Thomas).
 6. **Bestand aus Excel/CSV** – Import unter Inventur (SheetJS), setzt Bestand per Inventurbuchung (Differenz). Spalten wie der Export des Rechnungsprogramms plus „Name im Rechnungsprogramm“ (→ `alias`). Leerer Bestand = 0, Stichtag aus dem Dateinamen. Wiederholter Import: nur gefüllte Zellen überschreiben, Treffer auch über `alias`.
+6b. **Einkauf** – Veranstaltungen mit Bedarf (`einkauf.json`, getrennt von den Personal-Events, Wunsch Thomas). `scanOffers` liest Angebote aus Dropbox `Angebote/` (PDF/CSV/XML) automatisch: Datei zuerst nach `Angebote/<Jahr>/` verschieben (nur ein Gerät gewinnt), dann `readDocument` + `parseOffer` (Titel in Anführungszeichen, Liefer-/Leistungsdatum) → Veranstaltung + Positionen (`ekLineFrom`: Regel/exakt sicher, „ähnlich“ mit „✓ passt“ bestätigen, offen = zuordnen, unbekannte Pauschale/Stunde = nicht berücksichtigt). Zuordnung von Hand lernt eine Regel (`ekLearn`, gleiche `rules` wie Belege). `ekCalc`: nur Ware; Kasten + Flasche in Flaschen zusammengerechnet, gekauft in ganzen Kästen (`packLink`/`packsFor`), Dezimalbestand aufgerundet; Leistungen nur als Hinweis, wenn eigener Bestand > 0 nicht reicht. Jede Veranstaltung eigene Liste, nichts wird gebucht. `ekPdf`: jsPDF, Spalten Artikel/Bedarf/Einkaufen/Einheit/Abhaken, Ablage `Einkauf/Einkaufsliste_<Datum>_<Name>.pdf`, danach Teilen/Herunterladen (eigener Klick, wegen iOS-Nutzergeste). Ansichten `vEinkauf`, `vEkEvent`.
 7. **Personal** – Ampel (`evState`), Doppelbuchung (`conflicts`), WhatsApp-Text (`waText`/`waShare`), Ansichten `vPersonal` (Events), `vPEvent`, `vPPersonen`, Schnell buchen Personal (`pqOpen`/`renderPQ`/`pqBook`, rechter Knopf `fab-personal`). Konzept: `docs/personal.md`.
 8. **Ansichten** – Bestand und Inventur gegliedert nach Artikelgruppe (`groupArts`; Umschalter nach Typ, Typ-Filter und „ohne Einheit“ auf Wunsch von Thomas wieder entfernt), aufklappbare `details.grp`, Inhalt erst beim Aufklappen (`toggle`-Listener, `GRP`), Filter nur Nachbestellen, Leistungen ohne Bestand nur auf Wunsch ausgeblendet (`hideSvc`, Standard aus), Suche auch in Beschreibung und Zweitname. `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`; `render()` schreibt `#view` komplett neu.
 9. **Ereignisse** – zentrale Delegation über `data-act` / `data-go` / `data-li` usw.
 
 Externe Bibliotheken (versionsgenau gepinnt, per `loadScript` erst bei Bedarf geladen):
-pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS xlsx 0.18.5 (cdnjs).
+pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS xlsx 0.18.5 (cdnjs), jsPDF 2.5.1 (cdnjs, Einkaufsliste).
 
 ## Datenmodell (`lager.json` in Dropbox, gleiche Struktur in `localStorage` `bb-lager-data-v1`)
 
@@ -69,6 +70,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - Schutz: Fehlt `lager.json` nach einem früheren Sync, wird **nicht** neu angelegt (Ordner umbenannt?), außer `CFG.allowNew`.
 - Gerätekonfiguration in `localStorage` `bb-lager-cfg-v1`: `appKey` (leer → `APP_KEY`), `base` (Standard `/Apps/BundB App`; fehlt dort `lager.json`, sucht `findBase()` auch unter `/BundB App` und stellt um), `ownName`, Tokens, `autoBook`.
 - Datenformat-Änderungen müssen abwärtskompatibel sein (ältere Geräte syncen weiter mit). Neue Sammlungen in `COLLS` aufnehmen.
+- **`einkauf.json`** (Einkauf): `ekEvents {id, name, date, party, offerNo, file, note}`, `ekLines {id, eventId, desc /* Text aus dem Angebot */, qty, unit, articleId /* ''=offen, 'skip' */, how /* Regel|exakt|ähnlich|bestätigt|manuell|Pauschale|… */, src /* angebot|manuell */, pos}`. Eigener Zustand `ES`, `localStorage` `bb-einkauf-data-v1`, Sammlungen `ECOLLS`, `syncEinkauf` wie `syncPersonal` (ohne Neustart-Logik).
 - **`personal.json`** (Personal: `persons`, `events`, `assignments`, Format in `docs/personal.md`): eigener Zustand `PS`, `localStorage` `bb-personal-data-v1`, Sammlungen `PCOLLS`. `put`/`del`/`live` wählen den Zustand über den Sammlungsnamen. `sync()` ruft nach `lager.json` `syncPersonal()` auf (gleicher Merge, Upload nur bei Änderungen, Datei entsteht erst mit dem ersten Datensatz).
 
 ## Dropbox
@@ -79,6 +81,9 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
   - `Eingang/_Neu`, `Ausgang/_Neu` – Posteingang; die App liest dort beim Start und bei Rückkehr in den Vordergrund automatisch ein
   - `Eingang/<Jahr>`, `Ausgang/<Jahr>` – Archiv nach dem Buchen (nur Ablage, für den Bestand nicht nötig)
   - `Inventur/` – CSV-Protokolle der Inventuren
+  - `Angebote/` – Angebote hier hineinlegen, die App liest sie ein und legt sie unter `Angebote/<Jahr>` ab
+  - `Einkauf/` – erzeugte Einkaufslisten (PDF)
+  - `einkauf.json` – Einkauf-Daten, nie von Hand ändern
   - `App/` – Kopie der App-Dateien, wird bei jedem Release mitgespiegelt (maßgeblich ist das Repository); per Doppelklick geöffnet (`file://`) leitet `index.html` auf die Online-Version weiter
   - `Inventur/Startbestand_2026-11-03.xlsx` – bereinigter Artikelexport (394 Artikel), Grundlage des echten Bestands; `Inventur/Claude1.numbers` ist das Original
   - `Vorlage_Lagerbestand.xlsx` – Vorlage für den Bestandsimport
@@ -94,6 +99,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 
 ## Tests
 
+- UI-Tests der Etappe 2 und des Einkaufs (Playwright-Skripte mit simulierter Dropbox, echtem Angebot A-187) liegen nicht im Repo; Ablauf wie unten beschrieben.
 - `node --test` (im Root) – Parser-Tests (Node ≥ 20, keine Abhängigkeiten). Laufen gegen den PARSER-Abschnitt aus `index.html`.
 - UI/End-to-End: mit Playwright `index.html` öffnen, Dropbox-API per `page.route('https://*.dropboxapi.com/**', …)` simulieren (list_folder, download, upload, move_v2), CDN-Bibliotheken bei Bedarf stubben. Geprüft wurden so: Posteingang-Warteschlange, manuelle Zuordnung, Neustart über zwei Geräte, Schnellbuchung, Handybreite 390 px ohne horizontales Scrollen, Dark Mode.
 - `testdaten/` enthält erfundene Belege (PDF mit Textebene, PDF mit eingebetteter ZUGFeRD-XML, XRechnung-XML, Handyfoto, CSV-Lieferliste, Ausgangsrechnungen).

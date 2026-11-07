@@ -110,6 +110,15 @@ details.grp>summary::-webkit-details-marker{display:none}
 details.grp>summary::before{content:'';flex:0 0 auto;width:7px;height:7px;margin:0 4px 0 2px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
 details.grp[open]>summary::before{transform:rotate(45deg)}
 .inv-d:empty{display:none} .inv-d{margin-top:3px}
+.item-card{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;cursor:pointer}
+.item-card:focus-visible{outline:2px solid var(--accent)}
+.ek-lines{display:grid}
+.ek-line{display:grid;grid-template-columns:minmax(0,1fr) 90px minmax(70px,auto) auto;gap:6px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.ek-line:first-child{border-top:0}
+.ek-line .ek-desc{grid-column:1/-1;font-weight:600;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (max-width:560px){ .ek-line{grid-template-columns:minmax(0,1fr) 80px auto} .ek-line .ek-art{grid-column:1/-1} .ek-line .ek-unit{grid-column:auto} }
 details.grp>summary .grp-h{flex:1;font:700 18px/1.1 var(--f-display);letter-spacing:.02em}
 details.grp[open]>summary{border-bottom:1px solid var(--line)}
 details.grp .list{border:0;border-radius:0}
@@ -300,7 +309,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   header.top .wrap{gap:10px}
   nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:9;margin:0;background:var(--surface);border-top:1px solid var(--line);
     padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));justify-content:space-around}
-  nav.tabs button{padding:8px 6px;font-size:12px;flex:1}
+  nav.tabs button{padding:8px 2px;font-size:11.5px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sync{margin-left:auto}
   main{padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
   .stats{grid-template-columns:repeat(3,minmax(0,1fr))} .stat b{font-size:24px} .stat{padding:10px}
@@ -328,6 +337,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   <button class="brand" data-go="home" aria-label="Zur Startseite">B&amp;B<small id="areaName">Lager</small></button>
   <nav class="tabs" id="tabs">
     <button data-go="bestand">Bestand</button>
+    <button data-go="einkauf">Einkauf</button>
     <button data-go="belege">Belege</button>
     <button data-go="buchungen">Buchungen</button>
     <button data-go="inventur">Inventur</button>
@@ -353,7 +363,8 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 
 <script>
 /* ===================== PARSER-START (reine Funktionen, ohne DOM) ===================== */
-const UNIT_WORDS = ['stk','stück','st','fl','flasche','flaschen','kiste','kisten','ki','ka','kasten','kt','karton','pck','pack','packung','pk','kg','g','l','ltr','liter','sack','tray','glas','tasse','dose','dosen','fass','eimer','btl','beutel','rolle','satz','set','paar','ve'];
+const UNIT_WORDS = ['stk','stück','st','fl','flasche','flaschen','kiste','kisten','ki','ka','kasten','kästen','kaesten','kt','karton','kartons',
+  'pauschale','pauschalen','stunde','stunden','std','meter','packungen','rollen','sets','säcke','trays','fässer','gläser','pck','pack','packung','pk','kg','g','l','ltr','liter','sack','tray','glas','tasse','dose','dosen','fass','eimer','btl','beutel','rolle','satz','set','paar','ve'];
 const SUMMARY_RX = /\b(summe|zwischensumme|gesamtbetrag|gesamtsumme|rechnungsbetrag|netto|brutto|mwst|ust\b|umsatzsteuer|übertrag|uebertrag|skonto|zahlbar|endbetrag|zu zahlen)\b/i;
 
 function parseNum(t){
@@ -392,8 +403,10 @@ function cleanName(desc){
 }
 
 /* Eine Textzeile -> Position oder null */
+/* Fußzeilen mit Bankdaten/Steuernummer sind nie Positionen (sonst wird „Tel. … IBAN DE65 8509 …“ als Menge × Preis gelesen) */
+const FOOTER_RX = /\b(iban|bic|ust-?id|steuernummer|steuer-nr|amtsgericht|handelsregister)\b|\btel\.?\s*:/i;
 function parseItemLine(line){
-  if(!line || SUMMARY_RX.test(line)) return null;
+  if(!line || SUMMARY_RX.test(line) || FOOTER_RX.test(line)) return null;
   const toks = line.replace(/\s+€/g,'€').split(/\s+/).filter(Boolean);
   const nums = [];
   toks.forEach((t,i)=>{ const v=parseNum(t); if(!isNaN(v)) nums.push({i,v,dec:/[,.]\d{2}$/.test(t.replace(/€$/,''))}); });
@@ -440,7 +453,7 @@ function parseItemLine(line){
 function parseHeader(lines, ownName){
   const text = lines.join('\n');
   let number='', date='', party='';
-  const nm = text.match(/(?:rechnungs?[\s-]*(?:nr|nummer|no)\.?|beleg[\s-]*(?:nummer|nr)\.?|lieferschein[\s-]*(?:nr|nummer)\.?|invoice\s*(?:no|number)\.?)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,})/i);
+  const nm = text.match(/(?:rechnungs?[\s-]*(?:nr|nummer|no)\.?|angebots?[\s-]*(?:nr|nummer)\.?|beleg[\s-]*(?:nummer|nr)\.?|lieferschein[\s-]*(?:nr|nummer)\.?|invoice\s*(?:no|number)\.?)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,})/i);
   if(nm) number = nm[1].replace(/[.,]$/,'');
   const dl = lines.find(l=>/rechnungsdatum|datum/i.test(l) && /\d{1,2}\.\d{1,2}\.\d{2,4}/.test(l)) || text;
   const dm = dl.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/);
@@ -461,6 +474,17 @@ function parseHeader(lines, ownName){
   return {number, date, party};
 }
 
+/* Angebot: Titel der Veranstaltung („"Karneval Auftakt" 14.11.2026“) und Veranstaltungsdatum (Liefer-/Leistungsdatum) */
+function parseOffer(lines){
+  let title='', eventDate='';
+  const toIso = m => { let y=m[3]; if(y.length===2) y='20'+y; return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; };
+  for(const l of lines){
+    if(!eventDate){ const m = l.match(/(?:liefer|leistungs|veranstaltungs|event)[^:\n]{0,20}datum\s*:?\s*(\d{1,2})\.(\d{1,2})\.(\d{2,4})/i); if(m) eventDate = toIso(m.slice(0)); }
+    if(!title){ const m = l.match(/^\s*[„"“”']([^"“”„']{3,80})[“"”']/); if(m) title = m[1].trim(); }
+  }
+  if(!eventDate){ for(const l of lines){ const m = l.match(/^\s*[„"“]([^"“”]+)[“"”]\s+(\d{1,2})\.(\d{1,2})\.(\d{2,4})/); if(m){ eventDate = toIso([0,m[2],m[3],m[4]]); break; } } }
+  return {title, eventDate};
+}
 function parseTextDoc(lines, ownName){
   const items = [];
   for(const l of lines){ const it=parseItemLine(l); if(it) items.push(it); }
@@ -594,12 +618,18 @@ const PCOLLS=['persons','events','assignments','settings'];   // settings: gemei
 function emptyPState(){ return {persons:{},events:{},assignments:{},settings:{},meta:{v:1}}; }
 let PS = Object.assign(emptyPState(), lsGet(LS_PDATA)||{});
 PCOLLS.forEach(c=>{ if(!PS[c]) PS[c]={}; });
-const store = coll => PCOLLS.includes(coll) ? PS : S;
+/* Einkauf: eigene Datei einkauf.json (Veranstaltungen mit Bedarf, getrennt von den Personal-Events, Wunsch Thomas) */
+const LS_EDATA='bb-einkauf-data-v1';
+const ECOLLS=['ekEvents','ekLines'];
+function emptyEState(){ return {ekEvents:{},ekLines:{},meta:{v:1}}; }
+let ES = Object.assign(emptyEState(), lsGet(LS_EDATA)||{});
+ECOLLS.forEach(c=>{ if(!ES[c]) ES[c]={}; });
+const store = coll => PCOLLS.includes(coll) ? PS : ECOLLS.includes(coll) ? ES : S;
 
 function put(coll, obj){ obj.updatedAt = now(); obj.by = DEVICE; store(coll)[coll][obj.id]=obj; return obj; }
 function del(coll, id){ const o=store(coll)[coll][id]; if(o){ o.deleted=true; o.updatedAt=now(); o.by=DEVICE; } }
 const live = coll => Object.values(store(coll)[coll]).filter(o=>!o.deleted);
-function persist(){ lsSet(LS_DATA, S); lsSet(LS_PDATA, PS); scheduleSync(); }
+function persist(){ lsSet(LS_DATA, S); lsSet(LS_PDATA, PS); lsSet(LS_EDATA, ES); scheduleSync(); }
 function saveCfg(){ lsSet(LS_CFG, CFG); }
 
 function merge(a,b,colls=COLLS,empty=emptyState){
@@ -733,7 +763,7 @@ function scheduleSync(){ if(!DBX.connected) return; clearTimeout(syncTimer); syn
 /* Zwei Geräte gleichzeitig: Hochgeladen wird nur, wenn die Datei in Dropbox seit dem Holen unverändert ist (rev).
    Hat inzwischen ein anderes Gerät gespeichert, meldet Dropbox einen Konflikt: neu holen, zusammenführen, nochmal.
    Hochgeladen wird nur bei echten Änderungen, sonst würden sich zwei offene Geräte gegenseitig ständig anstoßen. */
-let SEEN = {lager:'', personal:''};   // zuletzt bekannte Versionsnummern in Dropbox
+let SEEN = {lager:'', personal:'', einkauf:''};   // zuletzt bekannte Versionsnummern in Dropbox
 const differs = (L, R, colls) => colls.some(c=>{ const A=L[c]||{}, B=R[c]||{};
   return Object.keys(A).length!==Object.keys(B).length || Object.values(A).some(o=>!B[o.id] || B[o.id].updatedAt!==o.updatedAt); });
 const writeMode = blob => blob ? (blob.rev ? {'.tag':'update', update:blob.rev} : 'overwrite') : {'.tag':'add'};
@@ -742,14 +772,16 @@ async function sync(){
   if(syncing){ syncAgain=true; return; }
   syncing=true; setSync('busy');
   try{
-    const before = JSON.stringify(S), pBefore = JSON.stringify(PS), watch = watched();
+    const before = JSON.stringify(S), pBefore = JSON.stringify(PS), eBefore = JSON.stringify(ES), watch = watched();
     await syncLager();
     lsSet(LS_DATA,S);
     await syncPersonal(); lsSet(LS_PDATA,PS);
+    await syncEinkauf(); lsSet(LS_EDATA,ES);
     CFG.lastSync=now(); saveCfg(); setSync('ok');
     warnForeign(watch);
     if(JSON.stringify({...S,meta:0}) !== JSON.stringify({...JSON.parse(before),meta:0})
-      || JSON.stringify({...PS,meta:0}) !== JSON.stringify({...JSON.parse(pBefore),meta:0})) softRender();
+      || JSON.stringify({...PS,meta:0}) !== JSON.stringify({...JSON.parse(pBefore),meta:0})
+      || JSON.stringify({...ES,meta:0}) !== JSON.stringify({...JSON.parse(eBefore),meta:0})) softRender();
   }catch(e){ setSync('err', e.message); }
   syncing=false;
   if(syncAgain){ syncAgain=false; sync(); }
@@ -798,13 +830,28 @@ async function syncPersonal(){
     catch(e){ if(e.conflict && tries<4) continue; throw e; }
   }
 }
+/* einkauf.json: gleicher Ablauf wie personal.json */
+async function syncEinkauf(){
+  for(let tries=0;; tries++){
+    const blob = await DBX.download(P('einkauf.json'));
+    const remote = blob ? JSON.parse(await blob.text()) : null;
+    if(remote){ ES = merge(ES, remote, ECOLLS, emptyEState); if(blob.rev) SEEN.einkauf = blob.rev; }
+    const changed = !remote ? ECOLLS.some(c=>Object.keys(ES[c]).length) : differs(ES, remote, ECOLLS);
+    ES.meta = {...(remote&&remote.meta||{}), v:1};
+    if(!changed) return;
+    ES.meta = {v:1, savedAt:now(), by:navigator.platform||''};
+    try{ const m = await DBX.upload(P('einkauf.json'), JSON.stringify(ES), writeMode(blob)); SEEN.einkauf = m.rev||''; return; }
+    catch(e){ if(e.conflict && tries<4) continue; throw e; }
+  }
+}
 
 /* Solange die App offen ist: alle 25 s nur die Versionsnummern abfragen und bei Änderung synchronisieren */
 async function pollRemote(){
   if(!DBX.connected || syncing || document.visibilityState!=='visible' || navigator.onLine===false) return;
   const revOf = f => DBX.api('files/get_metadata',{path:P(f)}).then(m=>m.rev||'', e=>/not_found/.test(e.summary||e.message) ? '' : null);
-  const [a,b] = await Promise.all([revOf('lager.json'), revOf('personal.json')]);
+  const [a,b,c] = await Promise.all([revOf('lager.json'), revOf('personal.json'), revOf('einkauf.json')]);
   let changed = false;
+  if(c!==null && c!==SEEN.einkauf){ SEEN.einkauf=c; changed=true; }
   if(a!==null && a!==SEEN.lager){ SEEN.lager=a; changed=true; }
   if(b!==null && b!==SEEN.personal){ SEEN.personal=b; changed=true; }
   if(changed) sync();
@@ -854,7 +901,7 @@ let toastT;
 function toast(msg, action){ const t=$('#toast'); t.textContent=msg;
   if(action){ const b=document.createElement('button'); b.textContent=action.label; b.onclick=()=>{ t.hidden=true; action.fn(); }; t.appendChild(b); }
   t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, action?7000:3200); }
-function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)) return res(); const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error(/tesseract/.test(src)?'Die Texterkennung konnte nicht geladen werden (Internetverbindung prüfen).':'Der PDF-Leser konnte nicht geladen werden (Internetverbindung prüfen).')); document.head.appendChild(s); }); }
+function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)) return res(); const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error(/jspdf/.test(src)?'Der PDF-Ersteller konnte nicht geladen werden (Internetverbindung prüfen).':/tesseract/.test(src)?'Die Texterkennung konnte nicht geladen werden (Internetverbindung prüfen).':'Der PDF-Leser konnte nicht geladen werden (Internetverbindung prüfen).')); document.head.appendChild(s); }); }
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const PDFJS_W='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const TESS='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
@@ -1719,6 +1766,231 @@ function vAnleitung(){
   </div>`;
 }
 
+/* ===================== Einkauf ===================== */
+/* Veranstaltung (Name, Datum) mit Bedarf aus einem Angebot oder von Hand. Bedarf gegen das Lager rechnen,
+   Fehlmenge als Einkaufsliste (PDF). Bucht nichts aus. Jede Veranstaltung hat ihre eigene Liste (Wunsch Thomas).
+   Ware wird gerechnet; Leistungen (Geräte, Arbeit, Pauschalen) nur als Hinweis, wenn der Lagerbestand nicht reicht.
+   Kasten und Flasche: Bedarf und Bestand in Flaschen zusammengerechnet, eingekauft wird in ganzen Kästen. */
+const JSPDF='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+let ekId = null, ekAdding = false, ekScanMsg = '', ekScanning = false, ekPdfOut = null;
+const ekLinesOf = id => live('ekLines').filter(l=>l.eventId===id).sort((a,b)=>(a.pos||0)-(b.pos||0)||(a.updatedAt||0)-(b.updatedAt||0));
+const ekSure = l => l.articleId==='skip' || (!!l.articleId && !!S.articles[l.articleId] && !S.articles[l.articleId].deleted && l.how!=='ähnlich');
+const ekOpenCount = id => ekLinesOf(id).filter(l=>!ekSure(l)).length;
+const EK_SKIP_UNITS = /^(pauschale|pauschalen|stunde|stunden|std)$/i;
+
+/* Positionen eines Angebots zuordnen: Regel → exakter Name → ähnlich (zu bestätigen) → offen.
+   Unbekannte Pauschalen/Stunden werden gleich als „nicht berücksichtigt“ vorgeschlagen. */
+function ekLineFrom(it, party, eventId, pos){
+  const sg = suggest(it, party);
+  let articleId = sg.articleId||'', how = sg.how||'';
+  if(!articleId && EK_SKIP_UNITS.test(it.unit||'')){ articleId='skip'; how='Pauschale'; }
+  return {id:uid(), eventId, desc:it.desc, qty:Number(it.qty)||0, unit:it.unit||'', articleId, how, src:'angebot', pos};
+}
+
+/* Zuordnung von Hand merken (gleiche Regeln wie bei Belegen: Text → Lagerartikel, Faktor 1) */
+function ekLearn(l){
+  if(!l.desc || !l.articleId || l.articleId==='skip' || !S.articles[l.articleId]) return;
+  const k='t:'+normText(l.desc); put('rules',{id:k, articleId:l.articleId, factor:1, sample:l.desc, party:(ES.ekEvents[l.eventId]||{}).party||''});
+}
+function ekCalc(id){
+  const st = stockMap(); const fam = new Map(); const hints = [];
+  const svc = new Map();
+  for(const l of ekLinesOf(id)){
+    if(!ekSure(l) || l.articleId==='skip') continue;
+    const a = S.articles[l.articleId]; const q = Number(l.qty)||0; if(!(q>0)) continue;
+    if(kindOf(a)==='leistung'){ svc.set(a.id, (svc.get(a.id)||0)+q); continue; }
+    const pl = packLink(a);
+    const key = pl ? pl.single.id : a.id;
+    if(!fam.has(key)) fam.set(key, {need:0, pref:null, packLines:0, singleLines:0});
+    const f = fam.get(key);
+    if(pl){ f.need += q*pl.n; f.pref = f.pref || a; f.packLines++; } else { f.need += q; f.singleLines++; }
+  }
+  for(const [aid, need] of svc){ const a=S.articles[aid], have=Math.max(0, st[aid]||0);
+    if(have>0 && need>have) hints.push({a, need, have}); }   // nur eigene Geräte; ohne Bestand = Pauschale oder zugemietet
+  const rows = [];
+  for(const [key, f] of fam){
+    const single = S.articles[key];
+    const packs = packsFor(single);
+    const avail = Math.max(0, st[single.id]||0) + packs.reduce((s,p)=>s+Math.max(0, st[p.pack.id]||0)*p.n, 0);
+    const missing = Math.round((f.need - avail)*1000)/1000;
+    const pk = f.pref ? packs.find(p=>p.pack.id===f.pref.id) || packs[0] : packs[0];
+    let buy=0, buyArt=single;
+    if(missing>0){ if(pk){ buy = Math.ceil(missing/pk.n - 1e-9); buyArt = pk.pack; } else buy = Math.ceil(missing - 1e-9); }
+    // Bedarf so anzeigen, wie er im Angebot stand (nur Kästen → in Kästen)
+    const inPacks = pk && f.packLines && !f.singleLines && Math.abs(f.need/pk.n - Math.round(f.need/pk.n))<1e-9;
+    const needArt = inPacks ? pk.pack : single, needQty = inPacks ? f.need/pk.n : f.need;
+    rows.push({art: buy ? buyArt : (inPacks ? pk.pack : single), cat: (f.pref||single).category||'ohne Gruppe',
+      need: needQty, needText: `${fmt(needQty,3)} ${uL(needArt, needQty)}`.trim(), buy, unit: buy ? uL(buyArt, buy) : '', avail});
+  }
+  rows.sort((x,y)=>x.cat.localeCompare(y.cat,'de')||x.art.name.localeCompare(y.art.name,'de'));
+  return {rows, buyRows: rows.filter(r=>r.buy>0), hints, open: ekOpenCount(id)};
+}
+
+/* Angebote aus Dropbox „Angebote/“ automatisch einlesen. Die Datei wird zuerst nach Angebote/<Jahr>/ verschoben:
+   nur das Gerät, dem das Verschieben gelingt, liest sie ein (keine doppelten Veranstaltungen bei zwei offenen Geräten). */
+async function scanOffers(){
+  if(!DBX.connected || ekScanning) return;
+  ekScanning = true;
+  try{
+    const list = (await DBX.list(P('Angebote'))).filter(e=>e['.tag']==='file' && /\.(pdf|csv|xml)$/i.test(e.name));
+    for(const f of list){
+      ekScanMsg = `Angebot „${f.name}“ wird gelesen …`; ekRefresh();
+      const target = P(`Angebote/${today().slice(0,4)}/${f.name}`);
+      let moved;
+      try{ moved = (await DBX.move(f.path_display||f.path_lower, target)).metadata.path_display; }catch(e){ continue; }
+      try{
+        const blob = await DBX.download(moved);
+        const ext = f.name.split('.').pop().toLowerCase();
+        const type = {pdf:'application/pdf', csv:'text/csv', xml:'application/xml'}[ext];
+        const ev = await ekFromFile(new File([blob], f.name, {type}), moved);
+        toast(`Angebot eingelesen: ${ev.name}`);
+      }catch(e){ toast(`Angebot ${f.name}: ${e.message}`); }
+    }
+    ekScanMsg = '';
+  }catch(e){ ekScanMsg = 'Angebote konnten nicht geprüft werden: '+e.message; }
+  ekScanning = false; ekRefresh();
+}
+async function ekFromFile(file, dbxPath){
+  let r;
+  try{ r = await readDocument(file, m=>{ ekScanMsg=m; }); }catch(e){ r = {items:[], raw:[], number:'', date:'', party:'', unreadable:e.message}; }
+  const off = parseOffer(r.raw||[]);
+  const baseName = off.title || r.party || file.name.replace(/\.[^.]+$/,'');
+  const dup = r.number && live('ekEvents').some(e=>e.offerNo===r.number);
+  const ev = put('ekEvents', {id:uid(), name: baseName + (dup ? ' (Angebot erneut)' : ''), date: off.eventDate || r.date || today(),
+    party: r.party||'', offerNo: r.number||'', file: dbxPath||'', note: r.items.length ? '' : 'Angebot nicht lesbar. Positionen bitte von Hand ergänzen.'});
+  r.items.forEach((it,i)=>put('ekLines', ekLineFrom(it, r.party||'', ev.id, i+1)));
+  persist();
+  return ev;
+}
+function ekRefresh(){ if(view==='einkauf' && !isTyping()) $('#view').innerHTML = vEinkauf(); else if(view==='einkauf'){ const m=$('#ekScanMsg'); if(m) m.textContent=ekScanMsg; } }
+
+function vEinkauf(){
+  const evs = live('ekEvents').sort((a,b)=>(a.date||'').localeCompare(b.date||'')||a.name.localeCompare(b.name));
+  const up = evs.filter(e=>(e.date||'')>=today()), past = evs.filter(e=>(e.date||'')<today()).reverse();
+  const card = e => { const c=ekCalc(e.id), n=ekLinesOf(e.id).length;
+    const pill = c.open ? `<span class="pill warn">${c.open} zuordnen</span>` : c.buyRows.length ? `<span class="pill">${c.buyRows.length} einkaufen</span>` : n ? '<span class="pill ok">alles im Lager</span>' : '<span class="pill">leer</span>';
+    return `<button class="item-card" data-act="ekOpen" data-id="${e.id}"><span><b>${esc(e.name)}</b><br><span class="small muted">${dWD(e.date)}${e.party&&e.party!==e.name?' · '+esc(e.party):''}${e.offerNo?' · '+esc(e.offerNo):''} · ${n} Pos.</span></span>${pill}</button>`; };
+  return `<div class="stack">
+    <div class="row spread"><div><div class="eyebrow">Bedarf &amp; Einkaufslisten</div><h1>Einkauf</h1></div>
+      <button class="btn primary" data-act="ekNew">+ Veranstaltung</button></div>
+    ${ekAdding?`<form class="panel stack" id="ekForm"><h3>Neue Veranstaltung</h3>
+      <div class="grid"><label class="f">Name<input id="ek-name" required placeholder="z. B. Sommerfest Firma X"></label>
+        <label class="f">Datum<input type="date" id="ek-date" required value="${today()}"></label>
+        <label class="f">Kunde (optional)<input id="ek-party"></label></div>
+      <div class="row"><button class="btn primary" type="submit">Anlegen</button><button class="btn" type="button" data-act="ekCancelNew">Abbrechen</button></div></form>`:''}
+    ${DBX.connected?`<div class="panel row spread"><span class="small muted">Angebote (PDF) einfach in den Dropbox-Ordner <code>${esc(P('Angebote').replace(/^\//,''))}</code> legen. Die App liest sie beim Öffnen ein und legt die Veranstaltung an.<br><b id="ekScanMsg">${esc(ekScanMsg)}</b></span>
+      <button class="btn sm" data-act="ekScan">Jetzt prüfen</button></div>`
+      :`<div class="note">Dropbox ist nicht verbunden. Angebote werden erst nach dem Verbinden eingelesen; Veranstaltungen von Hand gehen trotzdem.</div>`}
+    <div class="stack" style="gap:8px">${up.map(card).join('') || '<div class="panel empty">Keine kommenden Veranstaltungen.</div>'}</div>
+    ${past.length?`<details class="grp"><summary><span class="grp-h">Vergangene</span><span class="small muted num">${past.length}</span></summary><div class="stack" style="gap:8px;padding:10px">${past.map(card).join('')}</div></details>`:''}
+  </div>`;
+}
+
+let ekOptCache = null;
+function ekOptions(sel){
+  if(!ekOptCache){
+    const arts = live('articles').sort((a,b)=>(a.category||'~').localeCompare(b.category||'~')||a.name.localeCompare(b.name));
+    let og='', h='';
+    for(const a of arts){ const c=a.category||'ohne Gruppe'; if(c!==og){ h += (og?'</optgroup>':'')+`<optgroup label="${esc(c)}">`; og=c; }
+      h += `<option value="${a.id}">${esc(a.name)}${kindOf(a)==='leistung'?' · Leistung':''}</option>`; }
+    ekOptCache = h + (og?'</optgroup>':'');
+  }
+  return `<option value="" ${!sel?'selected':''} disabled>Lagerartikel wählen …</option><option value="skip" ${sel==='skip'?'selected':''}>— nicht berücksichtigen —</option>` +
+    (sel && S.articles[sel] ? ekOptCache.replace(`value="${sel}"`, `value="${sel}" selected`) : ekOptCache);
+}
+function vEkEvent(){
+  const e = ES.ekEvents[ekId];
+  if(!e || e.deleted){ view='einkauf'; return vEinkauf(); }
+  ekOptCache = null;
+  const lines = ekLinesOf(e.id), c = ekCalc(e.id), st = stockMap();
+  const lineHtml = l => { const a=S.articles[l.articleId]; const sure=ekSure(l);
+    const pill = l.articleId==='skip' ? '<span class="pill">nicht berücksichtigt</span>'
+      : !l.articleId || !a ? '<span class="pill warn">zuordnen</span>'
+      : l.how==='ähnlich' ? `<button class="btn sm primary" data-act="ekOk" data-id="${l.id}">✓ passt</button>`
+      : kindOf(a)==='leistung' ? '<span class="pill">Leistung, kein Einkauf</span>' : `<span class="pill ok">${esc(l.how||'zugeordnet')}</span>`;
+    return `<div class="ek-line ${sure?'':'need'}">
+      <div class="ek-desc">${l.desc?esc(l.desc):'<span class="muted">Position von Hand</span>'} ${pill}</div>
+      <label class="f ek-art"><span class="sr">Lagerartikel</span><select data-ekl="articleId" data-id="${l.id}" ${l.articleId?'':'class="need"'}>${ekOptions(l.articleId)}</select></label>
+      <label class="f ek-qty"><span class="sr">Menge</span><input data-ekl="qty" data-id="${l.id}" inputmode="decimal" value="${l.qty?fmt(l.qty,3):''}" placeholder="Menge"></label>
+      <span class="small muted ek-unit">${esc(a ? uL(a, l.qty) : l.unit)}${a && kindOf(a)!=='leistung' ? `<br>Lager ${fmt(st[a.id]||0,3)}` : ''}</span>
+      <button class="btn sm danger ek-del" data-act="ekDelLine" data-id="${l.id}" aria-label="Position entfernen">✕</button></div>`; };
+  const groups = []; for(const r of c.buyRows){ const g=groups.find(x=>x.cat===r.cat); if(g) g.rows.push(r); else groups.push({cat:r.cat, rows:[r]}); }
+  return `<div class="stack">
+    <div><a href="#" data-go="einkauf" class="small">‹ Einkauf</a></div>
+    <div><div class="eyebrow">${dWD(e.date)}${e.offerNo?' · Angebot '+esc(e.offerNo):''}</div><h1>${esc(e.name)}</h1></div>
+    ${e.note?`<div class="note">${esc(e.note)}</div>`:''}
+    <div class="panel grid">
+      <label class="f">Name<input data-eke="name" value="${esc(e.name)}"></label>
+      <label class="f">Datum<input type="date" data-eke="date" value="${esc(e.date)}"></label>
+      <label class="f">Kunde<input data-eke="party" value="${esc(e.party)}"></label>
+    </div>
+    <div class="panel stack">
+      <div class="row spread"><h2>Bedarf · ${lines.length} Positionen</h2>${c.open?`<span class="pill warn">${c.open} noch zuordnen</span>`:''}</div>
+      ${lines.length ? `<div class="ek-lines">${lines.map(lineHtml).join('')}</div>` : '<div class="small muted">Noch keine Positionen.</div>'}
+      <div class="row"><button class="btn sm" data-act="ekAddLine">+ Position</button></div>
+      <p class="small muted" style="margin:0">Zuordnungen werden gelernt: Beim nächsten Angebot (und bei Rechnungen) mit gleichem Text schlägt die App denselben Lagerartikel vor.</p>
+    </div>
+    <div class="panel stack">
+      <div class="row spread"><h2>Einkaufsliste</h2>
+        <button class="btn primary" data-act="ekPdf" ${c.buyRows.length?'':'disabled'}>PDF erstellen</button></div>
+      ${c.open?`<div class="note">${c.open} Position${c.open>1?'en sind':' ist'} noch nicht zugeordnet und fehlt in der Rechnung.</div>`:''}
+      ${groups.length ? groups.map(g=>`<div><div class="eyebrow" style="margin:6px 0 4px">${esc(g.cat)}</div><div class="tbl"><table><thead><tr><th>Artikel</th><th class="r">Bedarf</th><th class="r">Einkaufen</th></tr></thead><tbody>
+        ${g.rows.map(r=>`<tr><td>${esc(r.art.name)}</td><td class="r num">${esc(r.needText)}</td><td class="r num"><b>${fmt(r.buy)}</b> ${esc(r.unit)}</td></tr>`).join('')}</tbody></table></div></div>`).join('')
+        : `<div class="small muted">${lines.length ? 'Alles ist im Lager, nichts einzukaufen.' : 'Erst Positionen anlegen.'}</div>`}
+      ${c.hints.length?`<div><div class="eyebrow" style="margin:6px 0 4px">Hinweis: Lagerbestand reicht nicht (Leistung, nicht im Einkauf)</div>
+        ${c.hints.map(h=>`<div class="small">${esc(h.a.name)}: ${fmt(h.need)} gebraucht, ${fmt(h.have)} im Lager</div>`).join('')}</div>`:''}
+      ${ekPdfOut && ekPdfOut.id===e.id ? `<div class="row" style="gap:8px"><span class="small muted">${esc(ekPdfOut.where)}</span>
+        ${ekPdfOut.share?'<button class="btn sm" data-act="ekShare">Teilen</button>':''}<button class="btn sm" data-act="ekDownload">Herunterladen</button></div>`:''}
+    </div>
+    <div class="row"><button class="btn sm danger" data-act="ekDel" data-id="${e.id}" data-confirm="Veranstaltung löschen?">Veranstaltung löschen</button></div>
+  </div>`;
+}
+
+/* Einkaufsliste als PDF (jsPDF, Standardschrift mit Umlauten). Spalten: Artikel, Bedarf, Einkaufen, Einheit, Abhaken. */
+async function ekPdf(id){
+  const e = ES.ekEvents[id], c = ekCalc(id);
+  await loadScript(JSPDF);
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
+  const W=210, L=15, R=W-15; let y=18;
+  const cols = {art:L, need:118, buy:150, unit:166, box:R-5};
+  const head = () => { doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(90);
+    doc.text('Artikel', cols.art, y); doc.text('Bedarf', cols.need+25, y, {align:'right'}); doc.text('Einkaufen', cols.buy+12, y, {align:'right'}); doc.text('Einheit', cols.unit, y);
+    doc.setDrawColor(180); doc.line(L, y+1.5, R, y+1.5); doc.setTextColor(0); y+=6; };
+  const need = h => { if(y+h > 282){ doc.addPage(); y=18; head(); } };
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Einkaufsliste', L, y); y+=8;
+  doc.setFontSize(12); doc.text(e.name, L, y); y+=6;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text([dWD(e.date), e.party && e.party!==e.name ? e.party : '', e.offerNo ? 'Angebot '+e.offerNo : ''].filter(Boolean).join('  ·  '), L, y); y+=5;
+  doc.setTextColor(110); doc.text(`Erstellt ${new Date().toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})} · Lagerstand berücksichtigt`, L, y); doc.setTextColor(0); y+=4;
+  if(c.open){ y+=3; doc.setTextColor(170,90,0); doc.text(`Achtung: ${c.open} Position${c.open>1?'en':''} aus dem Angebot noch nicht zugeordnet, nicht enthalten.`, L, y); doc.setTextColor(0); y+=2; }
+  y+=8; head();
+  let cat='';
+  for(const r of c.buyRows){
+    if(r.cat!==cat){ need(14); cat=r.cat; y+=2; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(cat, L, y); y+=5.5; }
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const nameLines = doc.splitTextToSize(r.art.name, cols.need - L - 4);
+    const h = Math.max(7, nameLines.length*4.6+2.4); need(h);
+    doc.text(nameLines, cols.art, y);
+    doc.text(r.needText, cols.need+25, y, {align:'right'});
+    doc.setFont('helvetica','bold'); doc.text(fmt(r.buy), cols.buy+12, y, {align:'right'}); doc.setFont('helvetica','normal');
+    doc.text(r.unit||'', cols.unit, y);
+    doc.setDrawColor(60); doc.rect(cols.box, y-3.6, 4.5, 4.5);
+    doc.setDrawColor(225); doc.line(L, y+h-5.2, R, y+h-5.2);
+    y += h;
+  }
+  if(c.hints.length){ need(14); y+=4; doc.setFont('helvetica','bold'); doc.text('Hinweis: Lagerbestand reicht nicht (nicht im Einkauf)', L, y); y+=5.5; doc.setFont('helvetica','normal');
+    for(const h of c.hints){ need(6); doc.text(`${h.a.name}: ${fmt(h.need)} gebraucht, ${fmt(h.have)} im Lager`, L, y); y+=5; } }
+  const n = doc.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(130); doc.text(`B&B · ${e.name} · Seite ${i} von ${n}`, L, 290); }
+  const blob = doc.output('blob');
+  const fname = `Einkaufsliste_${e.date}_${e.name.replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').slice(0,60)}.pdf`;
+  const file = new File([blob], fname, {type:'application/pdf'});
+  let where = 'PDF erstellt.';
+  if(DBX.connected){ try{ await DBX.upload(P('Einkauf/'+fname), blob, 'overwrite'); where = `Abgelegt in Dropbox: Einkauf/${fname}`; }catch(err){ where = 'Dropbox-Ablage fehlgeschlagen: '+err.message; } }
+  ekPdfOut = {id, file, url: URL.createObjectURL(blob), where, share: !!(navigator.canShare && navigator.canShare({files:[file]}))};
+  return ekPdfOut;
+}
+
 /* ===================== Personal ===================== */
 const ROLES = {gastro:'Gastronomie', technik:'Technik', aufbau:'Aufbauhelfer', abbau:'Abbauhelfer'};
 const ROLE_SHORT = {gastro:'Gastro', technik:'Technik', aufbau:'Aufbau', abbau:'Abbau'};
@@ -2333,7 +2605,7 @@ function vHome(){
     <div class="modules">
       <button class="module" data-go="lager">
         <b>Lager</b>
-        <span class="muted">Bestand, Belege, Buchungen und Inventur</span>
+        <span class="muted">Bestand, Einkauf, Belege, Buchungen und Inventur</span>
         ${open ? `<span class="tag">${open} neue${open>1?'':'r'} Beleg${open>1?'e':''}</span>` : ''}
       </button>
       <button class="module" data-go="personal">
@@ -2344,12 +2616,12 @@ function vHome(){
     </div>
   </div>`;
 }
-const VIEWS = {home:vHome, personal:vPersonal, pEvent:vPEvent, pPersonen:vPPersonen, anleitung:vAnleitung, bestand:vBestand, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
+const VIEWS = {home:vHome, personal:vPersonal, pEvent:vPEvent, pPersonen:vPPersonen, anleitung:vAnleitung, bestand:vBestand, einkauf:vEinkauf, ekEvent:vEkEvent, belege:vBelege, buchungen:vBuchungen, inventur:vInventur, setup:vSetup};
 function render(){
   const area = curArea = areaOf(view);
   document.body.dataset.area = area;
   $('#areaName').textContent = AREA_NAME[area];
-  const tab = view==='anleitung' ? 'setup' : view==='pEvent' ? 'personal' : view;
+  const tab = view==='anleitung' ? 'setup' : view==='pEvent' ? 'personal' : view==='ekEvent' ? 'einkauf' : view;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
@@ -2357,7 +2629,7 @@ function render(){
 }
 function softRender(){
   const a=document.activeElement;
-  if(IMP || XL || addingArt || pAddEvent || pEditEvent || pEditPerson || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
+  if(IMP || XL || addingArt || ekAdding || pAddEvent || pEditEvent || pEditPerson || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName))) return;
   render();
 }
 
@@ -2400,7 +2672,7 @@ document.addEventListener('click', async e=>{
   if(go){ e.preventDefault(); view=go.dataset.go;
     // Lager öffnen: liegen neue Belege bereit, gleich den ersten zeigen, sonst den Bestand
     if(view==='lager'){ view='bestand'; if(!IMP) openNextReady(); }
-    render(); window.scrollTo(0,0); if(view==='belege' && inboxCache.in===null) scanInbox(false); return; }
+    render(); window.scrollTo(0,0); if(view==='belege' && inboxCache.in===null) scanInbox(false); if(view==='einkauf') scanOffers(); return; }
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act, id = el.dataset.id;
   if(el.dataset.confirm && !arm(el)) return;
@@ -2513,6 +2785,18 @@ document.addEventListener('click', async e=>{
     case 'addArt': addingArt=true; render(); $('#na-name')?.focus(); break;
     case 'cancelArt': addingArt=false; render(); break;
     case 'toggleArt': openArt = openArt===id ? null : id; render(); break;
+    case 'ekNew': ekAdding=true; render(); $('#ek-name')?.focus(); break;
+    case 'ekCancelNew': ekAdding=false; render(); break;
+    case 'ekScan': scanOffers(); break;
+    case 'ekOpen': ekId=id; ekPdfOut=null; view='ekEvent'; render(); window.scrollTo(0,0); break;
+    case 'ekAddLine': { const n=ekLinesOf(ekId).length; put('ekLines',{id:uid(), eventId:ekId, desc:'', qty:0, unit:'', articleId:'', how:'manuell', src:'manuell', pos:n+1}); persist(); render();
+      const sels=document.querySelectorAll('.ek-line select'); sels[sels.length-1]?.focus(); break; }
+    case 'ekDelLine': del('ekLines',id); persist(); render(); break;
+    case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
+    case 'ekDel': del('ekEvents',id); ekLinesOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht'); break;
+    case 'ekPdf': { el.disabled=true; el.textContent='PDF wird erstellt …'; try{ await ekPdf(ekId); }catch(err){ toast('PDF fehlgeschlagen: '+err.message); } render(); break; }
+    case 'ekShare': if(ekPdfOut) navigator.share({files:[ekPdfOut.file], title:ekPdfOut.file.name}).catch(()=>{}); break;
+    case 'ekDownload': if(ekPdfOut){ const a=document.createElement('a'); a.href=ekPdfOut.url; a.download=ekPdfOut.file.name; document.body.appendChild(a); a.click(); a.remove(); } break;
     case 'openPack': { const a=S.articles[id], pl=a&&packLink(a); if(!pl || !((stockMap()[id]||0)>=1)) return;
       const g=uid(), ms=[put('movements',{id:uid(), articleId:a.id, qty:-1, type:'manual', reason:'Kasten angebrochen', date:today(), note:`→ ${pl.n} ${uL(pl.single,pl.n)||'×'} ${pl.single.name}`, open:g}),
         put('movements',{id:uid(), articleId:pl.single.id, qty:pl.n, type:'manual', reason:'Kasten angebrochen', date:today(), note:`aus ${a.name}`, open:g})];
@@ -2631,6 +2915,12 @@ document.addEventListener('change', e=>{
     // Einsätze dieser Schicht ziehen mit, solange ihre Planzeit noch der alten Schichtzeit entspricht
     asgOf(ev.id).filter(a=>a.shiftId===sh.id && a.planStart===old.start && a.planEnd===old.end).forEach(a=>{ a.planStart=sh.start; a.planEnd=sh.end; put('assignments',a); });
     persist(); return; }
+  if(t.dataset.ekl){ const l=ES.ekLines[t.dataset.id]; if(!l) return;
+    if(t.dataset.ekl==='qty'){ const n=parseNum(t.value); l.qty = isNaN(n) ? 0 : n; }
+    else { l.articleId=t.value; l.how = t.value==='skip' ? 'nicht berücksichtigt' : 'manuell'; ekLearn(l); }
+    put('ekLines',l); persist(); const y=scrollY; render(); scrollTo(0,y); return; }
+  if(t.dataset.eke){ const e=ES.ekEvents[ekId]; if(!e) return; const v=t.value.trim(); if(t.dataset.eke!=='party' && !v){ t.value=e[t.dataset.eke]; return; }
+    e[t.dataset.eke]=v; put('ekEvents',e); persist(); if(t.dataset.eke!=='party'){ const y=scrollY; render(); scrollTo(0,y); } return; }
   if(t.dataset.edit){ const a=S.articles[t.dataset.id]; const k=t.dataset.edit;
     if(k==='name' && !t.value.trim()){ t.value=a.name; return; }
     a[k] = ['min','lastPrice'].includes(k) ? (parseNum(t.value)||0) : k==='desc' ? t.value.replace(/\s+$/,'') : t.value.trim(); put('articles',a); persist();
@@ -2653,6 +2943,9 @@ document.addEventListener('toggle', e=>{
 document.addEventListener('submit', e=>{
   if(e.target.id==='pEventForm'){ e.preventDefault(); savePEvent(e.target.dataset.id); return; }
   if(e.target.id==='pPersonForm'){ e.preventDefault(); savePPerson(e.target.dataset.id); return; }
+  if(e.target.id==='ekForm'){ e.preventDefault(); const name=$('#ek-name').value.trim(); if(!name) return;
+    const ev=put('ekEvents',{id:uid(), name, date:$('#ek-date').value||today(), party:$('#ek-party').value.trim(), offerNo:'', file:'', note:''});
+    ekAdding=false; persist(); ekId=ev.id; view='ekEvent'; render(); window.scrollTo(0,0); return; }
   if(e.target.id!=='artForm') return; e.preventDefault();
   const name=$('#na-name').value.trim(); if(!name) return;
   const a = put('articles',{id:uid(), name, unit:$('#na-unit').value.trim(), unitPl:$('#na-unitpl').value.trim(), kind:$('#na-kind').value, desc:$('#na-desc').value.trim(), alias:'',
@@ -2679,7 +2972,7 @@ function bindDrop(){
   d.addEventListener('dragleave', ()=>d.classList.remove('over'));
   d.addEventListener('drop', e=>{ e.preventDefault(); d.classList.remove('over'); const f=e.dataTransfer.files[0]; if(f) importFile(f, dir, null); });
 }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && DBX.connected){ sync(); scanInbox(false); } });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && DBX.connected){ sync(); scanInbox(false); scanOffers(); } });
 
 render();
 /* Offline: App-Dateien und Bibliotheken lokal speichern (nur über https) */
@@ -2691,7 +2984,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 }
 window.addEventListener('online', ()=>{ if(DBX.connected){ sync(); scanInbox(false); } });
 window.addEventListener('offline', ()=>setSync(DBX.connected?'err':'off', 'Keine Internetverbindung. Buchungen werden gespeichert und später synchronisiert.'));
-if(DBX.connected){ setSync('busy'); sync().then(()=>scanInbox(true)); } else setSync('off');
+if(DBX.connected){ setSync('busy'); sync().then(()=>{ scanInbox(true); scanOffers(); }); } else setSync('off');
 </script>
 </body>
 </html>
