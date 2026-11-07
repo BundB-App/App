@@ -118,6 +118,8 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line .ek-desc{grid-column:1/-1;font-weight:600;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
+.ek-sec{margin:8px 0 0;font:700 20px/1.1 var(--f-display);letter-spacing:.02em}
+hr.ek-sep{border:0;border-top:3px solid var(--ink);opacity:.55;margin:14px 0 2px}
 .ek-brow{display:grid;grid-template-columns:minmax(0,1fr) auto 84px minmax(60px,auto) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .ek-brow:first-child{border-top:0}
 .ek-brow .ek-bname{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
@@ -1843,7 +1845,9 @@ function ekCalc(id){
     else if(l.list==='add'){ const a = S.articles[l.articleId]; const q = Number(l.qty)||0;
       rows.push({art: a || {id:'', name: l.name||''}, cat: 'Zusätzlich', need:0, needText:'', buy:q, unit: l.unit || (a ? uL(a,q) : ''), addId:l.id, line:l}); }
   }
-  rows.sort((x,y)=>(x.cat==='Zusätzlich')-(y.cat==='Zusätzlich')||x.cat.localeCompare(y.cat,'de')||(x.addId ? (x.line.pos||0)-(y.line.pos||0) : x.art.name.localeCompare(y.art.name,'de')));
+  // Waren zuerst, darunter Leistungen (Wunsch Thomas); Zusatzpositionen je Abschnitt am Ende
+  rows.forEach(r=>{ r.sec = r.svc || (r.addId && S.articles[r.line.articleId] && kindOf(S.articles[r.line.articleId])==='leistung') ? 'leistung' : 'ware'; });
+  rows.sort((x,y)=>(x.sec==='leistung')-(y.sec==='leistung')||(x.cat==='Zusätzlich')-(y.cat==='Zusätzlich')||x.cat.localeCompare(y.cat,'de')||(x.addId ? (x.line.pos||0)-(y.line.pos||0) : x.art.name.localeCompare(y.art.name,'de')));
   return {rows, buyRows: rows.filter(r=>r.buy>0 && (r.art.name||'').trim()), removed: rows.filter(r=>r.setId && !r.buy && r.calc), open: ekOpenCount(id)};
 }
 
@@ -1991,7 +1995,7 @@ function vEkEvent(){
       <button class="btn sm danger ek-del" data-act="ekDelLine" data-id="${l.id}" aria-label="Position entfernen">✕</button></div>`; };
   // Einkaufsliste: berechnete Zeilen mit änderbarer Menge, dazu von Hand ergänzte Positionen
   const shown = c.rows.filter(r=>r.buy>0 || r.addId);
-  const groups = []; for(const r of shown){ const g=groups.find(x=>x.cat===r.cat); if(g) g.rows.push(r); else groups.push({cat:r.cat, rows:[r]}); }
+  const groups = []; for(const r of shown){ const g=groups.find(x=>x.cat===r.cat && x.sec===r.sec); if(g) g.rows.push(r); else groups.push({cat:r.cat, sec:r.sec, rows:[r]}); }
   const buyRow = r => r.addId
     ? `<div class="ek-brow add"><div class="ek-bname"><select data-eka="articleId" data-id="${r.addId}" aria-label="Lagerartikel"><option value="">— eigener Text —</option>${ekOptCache===null?(ekOptions(''),ekOptCache):ekOptCache}</select>
         ${S.articles[r.line.articleId]?'':`<input data-eka="name" data-id="${r.addId}" value="${esc(r.line.name||'')}" placeholder="Was einkaufen?">`}</div>
@@ -1999,7 +2003,7 @@ function vEkEvent(){
         <input class="ek-bqty" data-eka="qty" data-id="${r.addId}" inputmode="decimal" value="${r.buy?fmt(r.buy,3):''}" placeholder="Menge" aria-label="Menge">
         <input class="ek-bunit" data-eka="unit" data-id="${r.addId}" value="${esc(r.line.unit||'')}" placeholder="${esc(r.unit||'Einheit')}" aria-label="Einheit">
         <button class="btn sm danger" data-act="ekDelLine" data-id="${r.addId}" aria-label="Position entfernen">✕</button></div>`.replace(`value="${r.line.articleId}"`, r.line.articleId?`value="${r.line.articleId}" selected`:'value=""')
-    : `<div class="ek-brow"><div class="ek-bname">${esc(r.art.name)}${r.svc?' <span class="pill">Leistung</span>':''}${r.setId?' <span class="pill warn">geändert</span>':''}</div>
+    : `<div class="ek-brow"><div class="ek-bname">${esc(r.art.name)}${r.setId?' <span class="pill warn">geändert</span>':''}</div>
         <span class="ek-bneed small muted">Bedarf ${esc(r.needText)}${r.setId?` · berechnet ${fmt(r.calc)}`:''}</span>
         <input class="ek-bqty" data-ekbuy="${r.art.id}" inputmode="decimal" value="${fmt(r.buy,3)}" aria-label="Einkaufen">
         <span class="ek-bunit small">${esc(r.unit)}</span>
@@ -2023,7 +2027,8 @@ function vEkEvent(){
       <div class="row spread"><h2>Einkaufsliste</h2>
         <button class="btn primary" data-act="ekPdf" ${c.buyRows.length?'':'disabled'}>PDF erstellen</button></div>
       ${c.open?`<div class="note">${c.open} Position${c.open>1?'en sind':' ist'} noch nicht zugeordnet und fehlt in der Rechnung.</div>`:''}
-      ${groups.length ? groups.map(g=>`<div><div class="eyebrow" style="margin:6px 0 4px">${esc(g.cat)}</div><div class="ek-buy">
+      ${groups.length ? groups.map((g,i)=>`${i===0||groups[i-1].sec!==g.sec?`${i?'<hr class="ek-sep">':''}<h3 class="ek-sec">${g.sec==='ware'?'Waren':'Leistungen'}</h3>`:''}
+        <div><div class="eyebrow" style="margin:6px 0 4px">${esc(g.cat)}</div><div class="ek-buy">
         ${g.rows.map(buyRow).join('')}</div></div>`).join('')
         : `<div class="small muted">${lines.length ? 'Alles ist im Lager, nichts einzukaufen.' : 'Erst Positionen anlegen.'}</div>`}
       ${c.removed.length?`<div class="small muted">Von der Liste genommen: ${c.removed.map(r=>`${esc(r.art.name)} <button class="btn sm" data-act="ekReset" data-id="${r.setId}">wieder aufnehmen</button>`).join(' · ')}</div>`:''}
@@ -2053,8 +2058,11 @@ async function ekPdf(id){
   doc.setTextColor(110); doc.text(`Erstellt ${new Date().toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})} · Lagerstand berücksichtigt`, L, y); doc.setTextColor(0); y+=4;
   if(c.open){ y+=3; doc.setTextColor(170,90,0); doc.text(`Achtung: ${c.open} Position${c.open>1?'en':''} aus dem Angebot noch nicht zugeordnet, nicht enthalten.`, L, y); doc.setTextColor(0); y+=2; }
   y+=8; head();
-  let cat='';
+  let cat='', sec='';
   for(const r of c.buyRows){
+    if(r.sec!==sec){ need(24);
+      if(sec){ y+=3; doc.setDrawColor(40); doc.setLineWidth(0.6); doc.line(L, y-4, R, y-4); doc.setLineWidth(0.2); y+=4; }
+      sec=r.sec; cat=''; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.text(sec==='ware'?'Waren':'Leistungen', L, y); y+=6.5; }
     if(r.cat!==cat){ need(14); cat=r.cat; y+=2; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(cat, L, y); y+=5.5; }
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
     const nameLines = doc.splitTextToSize(r.art.name, cols.need - L - 4);
