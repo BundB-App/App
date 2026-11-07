@@ -30,17 +30,17 @@ Kein Build-Schritt, kein Framework. Alles liegt im Repository-Root und wird so a
 
 1. **PARSER-START … PARSER-END** – reine Funktionen ohne DOM. Werden von `tests/parser.test.mjs` per Regex herausgelöst, daher Marker nicht umbenennen.
    - `packOf` („Bionade 12 x 0,33l“ → {n:12, single:'Bionade 0,33l'}, nur mit Volumenangabe, Maße wie „3x3m“ zählen nicht), `parseNum` (deutsche/englische Zahlen), `parseItemLine` (eine Textzeile → Position, sucht Menge × Preis = Gesamt; Fallback: Menge aus Gesamt/Preis bei OCR), `parseHeader` (Lieferant, Belegnummer, Datum), `parseTextDoc`, `parseXmlDoc` (XRechnung/ZUGFeRD, CII und UBL), `parseCsv`, `guessFactor` („Kiste 20x0,5l“ → 20), `cleanName`, `similarity`.
-2. **Zustand** – Datenmodell, `put`/`del`/`live`, `merge`, `stockMap`; Artikeltyp `KINDS`/`kindOf`, Einheit nach Menge `uL`, `pureService`, `sameName` (Name oder Zweitname), Kasten ↔ Flasche `packLink`/`packsFor`, Kasten anbrechen `openPacks`.
+2. **Zustand** – Datenmodell, `put`/`del`/`live`, `merge`, `stockMap`; Artikeltyp `KINDS` (Ware/Leistung)/`kindOf`, Einheit nach Menge `uL`, `pureService`, `sameName` (Name oder Zweitname), Kasten ↔ Flasche `packLink`/`packsFor`, Kasten anbrechen `openPacks`.
 3. **Dropbox** – OAuth PKCE ohne Secret, `DBX.api/download/upload/list/move`, `sync()`.
 4. **Beleg einlesen** – `readDocument` (PDF via pdf.js inkl. eingebetteter ZUGFeRD-XML, Foto/Scan via Tesseract, XML, CSV), Regeln/Vorschläge, Posteingang-Warteschlange (`scanInbox`, `runQueue`), `bookImport`.
    - `suggest`: gelernte Regel → exakter Name/Zweitname („exakt“) → Ähnlichkeit ≥ 0,8, aber nur zwischen Artikeln mit gleichem Gebinde (`packOf`). **Faktor immer 1** (Wunsch Thomas: aus Bezeichnungen wird nichts gerechnet; Kasten bucht auf den Kasten-Artikel), außer gelernt oder von Hand.
-   - `applyKind`: Ausgangsrechnung wählt Mietware und Leistung ab („kein Lagerabgang“), von Hand einschaltbar. Rechnung nur daraus lässt sich ohne Buchung abschließen und ablegen. Eingangsrechnungen buchen alles.
+   - `applyKind`: Ausgangsrechnung wählt Leistungen ab (Leistung = vermietetes Gerät, Arbeit, Pauschale) („kein Lagerabgang“), von Hand einschaltbar. Rechnung nur daraus lässt sich ohne Buchung abschließen und ablegen. Eingangsrechnungen buchen alles.
    - Abgang von Einzelflaschen (Ausgangsrechnung, Schnellbuchung): reicht der Bestand nicht, bricht `openPacks` Kästen an (Kasten −1, Flaschen +n, `type:'manual'`, `reason:'Kasten angebrochen'`). Rückgängig in der Schnellbuchung nimmt den Anbruch mit.
    - Automatisch buchen nur, wenn alle Positionen über Regel oder exakten Namen bekannt sind.
 5. **Schnellbuchung** – Bottom-Sheet für Bruch/Schwund/Rückgabe usw., mit Rückgängig. Die Knöpfe „Schnell buchen“ (Lager und Personal) gibt es nur auf der Startseite (Wunsch Thomas).
-6. **Bestand aus Excel/CSV** – Import unter Inventur (SheetJS), setzt Bestand per Inventurbuchung (Differenz). Spalten wie der Export des Rechnungsprogramms plus „Name im Rechnungsprogramm“ (→ `alias`). Leerer Bestand = 0, Stichtag aus dem Dateinamen. Wiederholter Import: nur gefüllte Zellen überschreiben, „Leistung“ setzt Mietware nicht zurück, Treffer auch über `alias`.
+6. **Bestand aus Excel/CSV** – Import unter Inventur (SheetJS), setzt Bestand per Inventurbuchung (Differenz). Spalten wie der Export des Rechnungsprogramms plus „Name im Rechnungsprogramm“ (→ `alias`). Leerer Bestand = 0, Stichtag aus dem Dateinamen. Wiederholter Import: nur gefüllte Zellen überschreiben, Treffer auch über `alias`.
 7. **Personal** – Ampel (`evState`), Doppelbuchung (`conflicts`), WhatsApp-Text (`waText`/`waShare`), Ansichten `vPersonal` (Events), `vPEvent`, `vPPersonen`, Schnell buchen Personal (`pqOpen`/`renderPQ`/`pqBook`, rechter Knopf `fab-personal`). Konzept: `docs/personal.md`.
-8. **Ansichten** – Bestand und Inventur gegliedert nach Artikelgruppe oder Artikeltyp (`CFG.bGroup`, `groupArts`), aufklappbare `details.grp`, Inhalt erst beim Aufklappen (`toggle`-Listener, `GRP`), Filter Typ/ohne Einheit/nur Nachbestellen, reine Leistungen ohne Bestand ausgeblendet (`showSvc`), Suche auch in Beschreibung und Zweitname. `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`; `render()` schreibt `#view` komplett neu.
+8. **Ansichten** – Bestand und Inventur gegliedert nach Artikelgruppe oder Artikeltyp (`CFG.bGroup`, `groupArts`), aufklappbare `details.grp`, Inhalt erst beim Aufklappen (`toggle`-Listener, `GRP`), Filter Typ/ohne Einheit/nur Nachbestellen, Leistungen ohne Bestand nur auf Wunsch ausgeblendet (`hideSvc`, Standard aus), Suche auch in Beschreibung und Zweitname. `vBestand`, `vBelege`, `vReview`, `vBuchungen`, `vInventur`, `vXl`, `vSetup`, `vAnleitung`, `vHome`; `render()` schreibt `#view` komplett neu.
 9. **Ereignisse** – zentrale Delegation über `data-act` / `data-go` / `data-li` usw.
 
 Externe Bibliotheken (versionsgenau gepinnt, per `loadScript` erst bei Bedarf geladen):
@@ -50,7 +50,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 
 ```js
 {
-  articles:  { [id]: {id, name, unit /* Einzahl */, unitPl /* Mehrzahl */, category /* Artikelgruppe */, kind /* ware|miete|leistung, fehlt = ware */,
+  articles:  { [id]: {id, name, unit /* Einzahl */, unitPl /* Mehrzahl */, category /* Artikelgruppe */, kind /* ware|leistung, fehlt = ware; altes 'miete' (v44) gilt als leistung */,
                       desc /* Zusätzliche Beschreibung, mit Zeilenumbrüchen */, alias /* Name im Rechnungsprogramm, falls korrigiert */,
                       min, lastPrice, updatedAt, deleted?} },
   movements: { [id]: {id, articleId, qty /* ± in Lagereinheit, Dezimal möglich */, type /* in|out|inv|manual */,
@@ -108,7 +108,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 
 ## Offene Ideen / nächste Etappen
 
-0. ~~Lager Etappe 2~~ – gebaut 2026-11-07 (siehe `docs/lager-etappe2.md`): 394 echte Artikel, Typ Ware/Mietware/Leistung, Einheit Einzahl/Mehrzahl, Kasten anbrechen. Offen: fehlende Einheiten trägt Thomas in der App nach (Filter „ohne Einheit“); Mindestbestände und Preise fehlen noch.
+0. ~~Lager Etappe 2~~ – gebaut 2026-11-07 (siehe `docs/lager-etappe2.md`): 394 echte Artikel, Typ Ware/Leistung (Mietware gab es kurz, auf Wunsch von Thomas wieder entfernt), Einheit Einzahl/Mehrzahl (fehlende auf Stück gesetzt), Kasten anbrechen. Offen: Mindestbestände und Preise.
 1. **Packliste** (neuer Menüpunkt):
    - Produkte aus mehreren Lagerpositionen, z. B. Zuckerwatte = Maschine, Zucker, Stäbe, Dosierer.
    - Produkt antippen → Bestand jeder zugehörigen Position, knappe Positionen markiert.

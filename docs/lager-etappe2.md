@@ -1,6 +1,8 @@
 # Lager Etappe 2 – echter Bestand und erweiterte Artikeldaten
 
-**Umgesetzt 2026-11-07.** Abweichungen nach dem Interview mit Thomas (gelten vor dem Text unten):
+**Umgesetzt 2026-11-07.** Nachtrag (v45): Mietware wieder entfernt, alles Mietware ist Leistung. Leistungen werden standardmäßig nicht mehr ausgeblendet (Haken „Leistungen ohne Bestand ausblenden“). Alle fehlenden Einheiten auf Stück/Stück.
+
+Abweichungen nach dem Interview mit Thomas (gelten vor dem Text unten):
 
 - Dritter Typ **Mietware** (`kind:'miete'`): Geräte, kommen zurück, Ausgangsrechnung bucht nicht aus, immer sichtbar. Alle Leistungen in Eventausstattung * und Gastro Hardware sind Mietware, außer Gläserpauschale, Gastro Equipment, Kabelpauschale. Dazu Becher Mehrweg, Filterkaffeemaschine 1l, Cocktailglas, Fotobox, Brotkorb, Cocktaillöffel, Kaffeelöffel, Geschirrtuch. Auf Ware: Jim Beam, Deckel Kaffeebecher, Schwamm, Tischdecke Papier.
 - **Kasten anbrechen** ist doch drin: reicht der Flaschenbestand bei einem Abgang nicht, Kasten −1 und Flaschen +n.

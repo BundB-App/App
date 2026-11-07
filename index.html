@@ -621,11 +621,11 @@ function stockMap(){
 const fmt = (n,d=2) => (Math.round(n*1000)/1000).toLocaleString('de-DE',{maximumFractionDigits:d});
 const eur = n => Number(n||0).toLocaleString('de-DE',{style:'currency',currency:'EUR'});
 
-/* Artikeltyp: ware (Ausgangsrechnung bucht aus), miete (Mietgerät, kommt zurück), leistung (Arbeit, Pauschale).
-   Fehlt kind (ältere Artikel), gilt ware. */
-const KINDS = {ware:'Ware', miete:'Mietware', leistung:'Leistung'};
-const kindOf = a => (a && KINDS[a.kind]) ? a.kind : 'ware';
-function kindFrom(s){ const t=normText(s); return /miet/.test(t) ? 'miete' : /leist|dienst/.test(t) ? 'leistung' : /ware|artikel|produkt/.test(t) ? 'ware' : ''; }
+/* Artikeltyp: ware (Ausgangsrechnung bucht aus) oder leistung (Mietgerät, Arbeit, Pauschale: kein Lagerabgang).
+   Fehlt kind (ältere Artikel), gilt ware. „miete“ gab es kurz in v44, gilt jetzt als leistung. */
+const KINDS = {ware:'Ware', leistung:'Leistung'};
+const kindOf = a => (a && (a.kind==='leistung' || a.kind==='miete')) ? 'leistung' : 'ware';
+function kindFrom(s){ const t=normText(s); return /miet|leist|dienst/.test(t) ? 'leistung' : /ware|artikel|produkt/.test(t) ? 'ware' : ''; }
 /* Einheit passend zur Menge: 1 Flasche, 3 Flaschen. Fehlt die Mehrzahl, gilt die Einzahl. */
 const uL = (a, n) => !a ? '' : (Math.abs(Number(n))===1 ? (a.unit||'') : (a.unitPl||a.unit||''));
 /* Reine Leistung ohne Bestand (Aufbau, Porto …): in Bestand und Inventur standardmäßig ausgeblendet */
@@ -944,7 +944,7 @@ function suggest(line, party){
   if(best && bs>=0.8) return {articleId:best.id, factor:1, how:'ähnlich'};
   return {articleId:'', factor:1, how:''};
 }
-/* Ausgangsrechnung: Mietware und Leistungen sind kein Lagerabgang und werden abgewählt (einschalten bleibt möglich) */
+/* Ausgangsrechnung: Leistungen (auch vermietete Geräte) sind kein Lagerabgang und werden abgewählt (einschalten bleibt möglich) */
 function applyKind(l, direction){
   const a = S.articles[l.articleId];
   const ns = direction==='out' && !!a && !a.deleted && kindOf(a)!=='ware';
@@ -998,7 +998,7 @@ async function bookImport(imp=IMP, silent=false){
   if(chosen.some(l=>!l.articleId)){ toast('Bitte jeder Position einen Lagerartikel zuordnen oder sie abwählen.'); return false; }
   if(chosen.some(l=>l.articleId==='new' && !l.desc.trim())){ toast('Für einen neuen Artikel fehlt die Bezeichnung.'); return false; }
   const lines = chosen;
-  // Rechnung nur aus Mietware/Leistungen: ohne Lagerbuchung abschließen und ablegen
+  // Rechnung nur aus Leistungen: ohne Lagerbuchung abschließen und ablegen
   const svcOnly = !lines.length && imp.items.some(l=>l.noStock);
   if(!lines.length && !svcOnly){ toast('Keine Position zum Buchen ausgewählt.'); return false; }
   const doc = put('docs',{id:uid(), dir:imp.dir, party:imp.party, number:imp.number, date:imp.date, source:imp.manual?'manuell zugeordnet':imp.source, file:'', lines:lines.length});
@@ -1023,7 +1023,7 @@ async function bookImport(imp=IMP, silent=false){
   persist();
   try{ doc.file = await archiveFile(imp); if(doc.file){ put('docs',doc); persist(); } }
   catch(e){ toast('Gebucht. Ablage in Dropbox fehlgeschlagen: '+e.message); }
-  if(!silent) toast(svcOnly ? 'Beleg abgeschlossen, kein Lagerabgang (nur Mietware/Leistungen)' : `${lines.length} Positionen gebucht${opened?` · ${opened} Kasten angebrochen`:''}`);
+  if(!silent) toast(svcOnly ? 'Beleg abgeschlossen, kein Lagerabgang (nur Leistungen)' : `${lines.length} Positionen gebucht${opened?` · ${opened} Kasten angebrochen`:''}`);
   finishQueueItem(imp);
   return true;
 }
@@ -1220,11 +1220,10 @@ function bookXl(){
       min:isNaN(it.min)?0:it.min, lastPrice:isNaN(it.price)?0:it.price}); nNew++; }
     else {
       // Wiederholter Import: nur gefüllte Zellen überschreiben, damit in der App nachgetragene Einheiten bleiben.
-      // Das Rechnungsprogramm kennt keine Mietware: „Leistung“ setzt Mietware nicht zurück.
       const before=JSON.stringify(a);
       for(const k of ['unit','unitPl','desc','alias']) if(it[k]) a[k]=it[k];
       if(it.cat) a.category=it.cat;
-      if(it.kind && !(it.kind==='leistung' && kindOf(a)==='miete')) a.kind=it.kind;
+      if(it.kind) a.kind=it.kind;
       if(!isNaN(it.min)) a.min=it.min; if(!isNaN(it.price)) a.lastPrice=it.price;
       if(JSON.stringify(a)!==before){ put('articles',a); nUpd++; }
     }
@@ -1265,7 +1264,7 @@ let openArt = null, search='', onlyLow=false, mvFilter='', addingArt=false;
 let invCounts = {};
 
 /* Liste gliedern nach Artikelgruppe oder Artikeltyp (Wunsch Thomas), Gruppen aufklappbar, Inhalt erst beim Aufklappen */
-let bKind='', showSvc=false, noUnit=false, invQ='';
+let bKind='', hideSvc=false, noUnit=false, invQ='';
 const bOpen=new Set(), invOpen=new Set(), GRP={b:{}, inv:{}};
 const groupBy = () => CFG.bGroup==='kind' ? 'kind' : 'cat';
 function groupArts(arts){
@@ -1284,7 +1283,7 @@ function listControls(id){
       <div class="seg" role="group" aria-label="Artikeltyp"><button data-act="bKind" data-k="" aria-pressed="${!bKind}">Alle</button>${Object.entries(KINDS).map(([k,l])=>`<button data-act="bKind" data-k="${k}" aria-pressed="${bKind===k}">${l}</button>`).join('')}</div>
       ${id==='search'?`<label class="row small" style="gap:6px"><input type="checkbox" id="onlyLow" ${onlyLow?'checked':''}> nur Nachbestellen</label>
       <label class="row small" style="gap:6px"><input type="checkbox" id="noUnit" ${noUnit?'checked':''}> ohne Einheit</label>`:''}
-      <label class="row small" style="gap:6px"><input type="checkbox" id="showSvc" ${showSvc?'checked':''}> Leistungen ohne Bestand zeigen</label>
+      <label class="row small" style="gap:6px"><input type="checkbox" id="hideSvc" ${hideSvc?'checked':''}> Leistungen ohne Bestand ausblenden</label>
     </div>`;
 }
 function grpHtml(set, g, body, extra){
@@ -1317,7 +1316,7 @@ function vBestand(){
   const value = all.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
   const q = normText(search);
   const shown = all.filter(a=>artMatch(a,q) && (!onlyLow || low.includes(a)) && (!bKind || kindOf(a)===bKind) && (!noUnit || !a.unit)
-    && (showSvc || q || bKind==='leistung' || !pureService(a,st) || a.id===openArt));
+    && (!hideSvc || q || bKind==='leistung' || !pureService(a,st) || a.id===openArt));
   const hidden = all.filter(a=>pureService(a,st)).length;
   let html = `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())}</div><h1>Bestand</h1></div>
@@ -1349,7 +1348,7 @@ function vBestand(){
     const groups = groupArts(shown);
     html += groups.map(g=>{ const nl=g.arts.filter(a=>low.includes(a)).length;
       return grpHtml('b', g, bItems, `${g.arts.length}${nl?` · <span style="color:var(--warn)">${nl} knapp</span>`:''}`); }).join('') || `<div class="panel empty">Keine Treffer.</div>`;
-    if(hidden && !showSvc && !q && bKind!=='leistung') html += `<p class="small muted" style="margin:0">${hidden} reine Leistungen ohne Bestand (Aufbau, Porto, Pauschalen …) sind ausgeblendet. Bei Belegen bleiben sie wählbar.</p>`;
+    if(hidden && hideSvc && !q && bKind!=='leistung') html += `<p class="small muted" style="margin:0">${hidden} Leistungen ohne Bestand sind ausgeblendet. Bei Belegen bleiben sie wählbar.</p>`;
   }
   return html + `</div>`;
 }
@@ -1538,10 +1537,10 @@ function vInventur(){
   const all = live('articles');
   const importBox = `<div class="panel stack"><div class="row spread"><h2>Bestand aus Excel übernehmen</h2>
       <div class="row"><button class="btn" data-act="xlTemplate">Vorlage laden</button><button class="btn primary" data-act="xlPick">Excel/CSV wählen</button></div></div>
-      <p class="small muted" style="margin:0">Spalten: Bezeichnung, Bestand, optional Beschreibung, Artikelgruppe, Artikeltyp (Ware/Mietware/Leistung), Einheit Einzahl und Mehrzahl, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt, leere Zellen ändern nichts.</p></div>`;
+      <p class="small muted" style="margin:0">Spalten: Bezeichnung, Bestand, optional Beschreibung, Artikelgruppe, Artikeltyp (Ware/Leistung), Einheit Einzahl und Mehrzahl, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt, leere Zellen ändern nichts.</p></div>`;
   if(!all.length) return `<div class="stack"><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
   const q = normText(invQ);
-  const arts = all.filter(a=>artMatch(a,q) && (!bKind || kindOf(a)===bKind) && (showSvc || q || bKind==='leistung' || !pureService(a,st)));
+  const arts = all.filter(a=>artMatch(a,q) && (!bKind || kindOf(a)===bKind) && (!hideSvc || q || bKind==='leistung' || !pureService(a,st)));
   const counted = Object.values(invCounts).filter(v=>v!==''&&v!=null).length;
   return `<div class="stack">
     <div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
@@ -2498,7 +2497,7 @@ document.addEventListener('click', async e=>{
     case 'xlBook': bookXl(); break;
     case 'xlTemplate': {
       const csv='\uFEFF'+['Bezeichnung;Zusätzliche Beschreibung;Artikelgruppe;Artikeltyp;Einheit (Einzahl);Einheit (Mehrzahl);Bestand;Mindestbestand;EK-Preis netto',
-        'Coca Cola 1l;;Gastro Getränke;Ware;Flasche;Flaschen;48;24;0,70','Coca Cola 12 x 1l;;Gastro Getränke;Ware;Kasten;Kästen;4;;','Faltzelt 3x3m;Mit Seitenwänden;Eventausstattung Hardware;Mietware;Stück;Stück;2;;'].join('\r\n');
+        'Coca Cola 1l;;Gastro Getränke;Ware;Flasche;Flaschen;48;24;0,70','Coca Cola 12 x 1l;;Gastro Getränke;Ware;Kasten;Kästen;4;;','Faltzelt 3x3m;Mit Seitenwänden;Eventausstattung Hardware;Leistung;Stück;Stück;2;;'].join('\r\n');
       const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='Vorlage_Lagerbestand.csv'; document.body.appendChild(a); a.click(); a.remove(); break; }
     case 'saveBase': {
       const v='/'+$('#cfg-base2').value.trim().replace(/^\/+|\/+$/g,''); if(v==='/'){ toast('Bitte einen Ordner angeben.'); return; }
@@ -2608,7 +2607,7 @@ document.addEventListener('change', e=>{
   if(t.dataset.xl!==undefined && XL){ XL.rows[+t.dataset.xl].on=t.checked; render(); return; }
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='noUnit'){ noUnit=t.checked; render(); return; }
-  if(t.id==='showSvc'){ showSvc=t.checked; render(); return; }
+  if(t.id==='hideSvc'){ hideSvc=t.checked; render(); return; }
   if(t.id==='bGroup'){ CFG.bGroup=t.value; saveCfg(); bOpen.clear(); invOpen.clear(); render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
