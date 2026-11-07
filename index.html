@@ -1853,26 +1853,39 @@ function ekCalc(id){
 
 /* Angebote aus Dropbox „Angebote/“ automatisch einlesen. Die Datei wird zuerst nach Angebote/<Jahr>/ verschoben:
    nur das Gerät, dem das Verschieben gelingt, liest sie ein (keine doppelten Veranstaltungen bei zwei offenen Geräten). */
-async function scanOffers(){
+async function scanOffers(manual){
   if(!DBX.connected || ekScanning) return;
-  ekScanning = true;
+  ekScanning = true; let found = 0;
+  const type = name => ({pdf:'application/pdf', csv:'text/csv', xml:'application/xml'})[name.split('.').pop().toLowerCase()];
+  const isOffer = e => e['.tag']==='file' && /\.(pdf|csv|xml)$/i.test(e.name);
   try{
-    const list = (await DBX.list(P('Angebote'))).filter(e=>e['.tag']==='file' && /\.(pdf|csv|xml)$/i.test(e.name));
-    for(const f of list){
+    // 1) Neue Angebote direkt in Angebote/: nach Angebote/<Jahr>/ verschieben, dann einlesen
+    const top = await DBX.list(P('Angebote'));
+    for(const f of top.filter(isOffer)){
       ekScanMsg = `Angebot „${f.name}“ wird gelesen …`; ekRefresh();
       const target = P(`Angebote/${today().slice(0,4)}/${f.name}`);
       let moved;
       try{ moved = (await DBX.move(f.path_display||f.path_lower, target)).metadata.path_display; }catch(e){ continue; }
-      try{
-        const blob = await DBX.download(moved);
-        const ext = f.name.split('.').pop().toLowerCase();
-        const type = {pdf:'application/pdf', csv:'text/csv', xml:'application/xml'}[ext];
-        await ekFromFile(new File([blob], f.name, {type}), moved);
-        toast(ekLastMsg);
-      }catch(e){ toast(`Angebot ${f.name}: ${e.message}`); }
+      try{ const blob = await DBX.download(moved); await ekFromFile(new File([blob], f.name, {type:type(f.name)}), moved); found++; toast(ekLastMsg); }
+      catch(e){ toast(`Angebot ${f.name}: ${e.message}`); }
+    }
+    // 2) Nur über „Jetzt prüfen“ (vorher wird synchronisiert, damit ein zweites Gerät nichts doppelt anlegt):
+    //    Angebote, die direkt in einen Jahresordner gelegt wurden (Angebote/2026/…) und noch zu keiner Veranstaltung gehören.
+    //    Auch gelöschte Veranstaltungen zählen, damit ein gelöschtes Angebot nicht wiederkommt.
+    if(manual){
+    const known = new Set(Object.values(ES.ekEvents).flatMap(e=>[e.file, ...(e.seen||[])]).map(x=>normText(x||'')).filter(Boolean));
+    for(const d of top.filter(e=>e['.tag']==='folder' && /^\d{4}$/.test(e.name))){
+      for(const f of (await DBX.list(d.path_display||d.path_lower)).filter(isOffer)){
+        if(known.has(normText(f.path_display||f.path_lower))) continue;
+        ekScanMsg = `Angebot „${f.name}“ wird gelesen …`; ekRefresh();
+        try{ const blob = await DBX.download(f.path_lower); await ekFromFile(new File([blob], f.name, {type:type(f.name)}), f.path_display||f.path_lower); found++; toast(ekLastMsg); }
+        catch(e){ toast(`Angebot ${f.name}: ${e.message}`); }
+      }
+    }
     }
     ekScanMsg = '';
-  }catch(e){ ekScanMsg = 'Angebote konnten nicht geprüft werden: '+e.message; }
+    if(manual && !found) toast(`Keine neuen Angebote im Dropbox-Ordner ${P('Angebote').replace(/^\//,'')}.`);
+  }catch(e){ ekScanMsg = 'Angebote konnten nicht geprüft werden: '+e.message; if(manual) toast(ekScanMsg); }
   ekScanning = false; ekRefresh();
 }
 async function ekReadOffer(file){
@@ -1925,14 +1938,18 @@ async function ekIntoEvent(file, id){
   const key = ekKeyOf(r), owner = ekOfferOwner(key, r);
   if(owner && owner.id!==id){ toast(`Angebot${r.number?' '+r.number:''} gehört schon zur Veranstaltung „${owner.name}“. Nicht doppelt eingelesen.`); return; }
   const res = ekPutOffer(e, r, key);
-  if(res!=='same' && DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add'); e.file = m.path_display||''; put('ekEvents', e); }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
+  if(res!=='same' && DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add');
+      if(e.file && normText(e.file)!==normText(m.path_display||'')) e.seen = [...new Set([...(e.seen||[]), m.path_display])]; else e.file = m.path_display||''; put('ekEvents', e); }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
   persist();
   toast(ekOfferMsg(res, e, r, r.items.length));
 }
 async function ekFromFile(file, dbxPath){
   const {r, off} = await ekReadOffer(file);
   const key = ekKeyOf(r), owner = r.items.length ? ekOfferOwner(key, r) : null;
-  if(owner){ const res = ekPutOffer(owner, r, key); persist(); ekLastMsg = ekOfferMsg(res, owner, r, r.items.length); return owner; }
+  if(owner){ const res = ekPutOffer(owner, r, key);
+    // Datei merken, damit derselbe Ablageort beim nächsten Prüfen nicht noch einmal gelesen wird
+    if(dbxPath && normText(dbxPath)!==normText(owner.file||'')){ owner.seen = [...new Set([...(owner.seen||[]), dbxPath])]; put('ekEvents', owner); }
+    persist(); ekLastMsg = ekOfferMsg(res, owner, r, r.items.length); return owner; }
   const baseName = off.title || r.party || file.name.replace(/\.[^.]+$/,'');
   const ev = put('ekEvents', {id:uid(), name: baseName, date: off.eventDate || r.date || today(),
     party: r.party||'', offerNo: r.number||'', file: dbxPath||'', note: r.items.length ? '' : 'Angebot nicht lesbar. Positionen bitte von Hand ergänzen.'});
@@ -2009,7 +2026,7 @@ function vEkEvent(){
         <span class="ek-bunit small">${esc(r.unit)}</span>
         ${r.setId?`<button class="btn sm" data-act="ekReset" data-id="${r.setId}" title="Berechnete Menge" aria-label="Zurück zur berechneten Menge">↺</button>`:`<button class="btn sm danger" data-act="ekBuyRemove" data-art="${r.art.id}" aria-label="Von der Liste nehmen">✕</button>`}</div>`;
   return `<div class="stack">
-    <div><a href="#" data-go="einkauf" class="small">‹ Einkauf</a></div>
+    <div><a href="#" data-go="einkauf" class="back"><span aria-hidden="true">‹</span> Alle Veranstaltungen</a></div>
     <div><div class="eyebrow">${dWD(e.date)}${e.offerNo?' · Angebot '+esc(e.offerNo):''}</div><h1>${esc(e.name)}</h1></div>
     ${e.note?`<div class="note">${esc(e.note)}</div>`:''}
     <div class="panel grid">
@@ -2882,7 +2899,7 @@ document.addEventListener('click', async e=>{
     case 'toggleArt': openArt = openArt===id ? null : id; render(); break;
     case 'ekNew': ekAdding=true; render(); $('#ek-name')?.focus(); break;
     case 'ekCancelNew': ekAdding=false; render(); break;
-    case 'ekScan': scanOffers(); break;
+    case 'ekScan': if(!DBX.connected){ toast('Dropbox ist nicht verbunden.'); break; } if(ekScanning){ toast('Angebote werden gerade geprüft …'); break; } toast('Angebote werden geprüft …'); await sync(); scanOffers(true); break;
     case 'ekOpen': ekId=id; ekPdfOut=null; view='ekEvent'; render(); window.scrollTo(0,0); break;
     case 'ekAddLine': { const n=ekLinesOf(ekId).length; put('ekLines',{id:uid(), eventId:ekId, desc:'', qty:0, unit:'', articleId:'', how:'manuell', src:'manuell', pos:n+1}); persist(); render();
       const sels=document.querySelectorAll('.ek-line select'); sels[sels.length-1]?.focus(); break; }
