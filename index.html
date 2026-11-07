@@ -563,7 +563,7 @@ function parseCsv(text){
     price: find(/einzelpreis|^preis|^ep$|stückpreis|^vk/),
     total: find(/^gesamt|summe|betrag|^gp$/),
     party: find(/lieferant|^kunde|^firma|händler/),
-    number: find(/beleg|rechnungs|^re ?nr|lieferschein/),
+    number: find(/beleg|rechnungs|angebot|^re ?nr|lieferschein/),
     date: find(/datum|^date/),
   };
   if(c.desc<0 || c.qty<0) return null;
@@ -1778,7 +1778,7 @@ function vAnleitung(){
    Ware wird gerechnet; Leistungen (Geräte, Arbeit, Pauschalen) nur als Hinweis, wenn der Lagerbestand nicht reicht.
    Kasten und Flasche: Bedarf und Bestand in Flaschen zusammengerechnet, eingekauft wird in ganzen Kästen. */
 const JSPDF='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-let ekId = null, ekAdding = false, ekScanMsg = '', ekScanning = false, ekPdfOut = null;
+let ekLastMsg = '', ekId = null, ekAdding = false, ekScanMsg = '', ekScanning = false, ekPdfOut = null;
 /* ekLines: Bedarfspositionen; mit list:'set' (Einkaufsmenge von Hand geändert) oder list:'add' (Zusatzposition) gehören sie zur Einkaufsliste */
 const ekAllOf = id => live('ekLines').filter(l=>l.eventId===id);
 const ekListOf = id => ekAllOf(id).filter(l=>l.list).sort((a,b)=>(a.pos||0)-(b.pos||0)||(a.updatedAt||0)-(b.updatedAt||0));
@@ -1863,8 +1863,8 @@ async function scanOffers(){
         const blob = await DBX.download(moved);
         const ext = f.name.split('.').pop().toLowerCase();
         const type = {pdf:'application/pdf', csv:'text/csv', xml:'application/xml'}[ext];
-        const ev = await ekFromFile(new File([blob], f.name, {type}), moved);
-        toast(`Angebot eingelesen: ${ev.name}`);
+        await ekFromFile(new File([blob], f.name, {type}), moved);
+        toast(ekLastMsg);
       }catch(e){ toast(`Angebot ${f.name}: ${e.message}`); }
     }
     ekScanMsg = '';
@@ -1876,29 +1876,64 @@ async function ekReadOffer(file){
   try{ r = await readDocument(file, m=>{ ekScanMsg=m; }); }catch(e){ r = {items:[], raw:[], number:'', date:'', party:'', unreadable:e.message}; }
   return {r, off: parseOffer(r.raw||[])};
 }
+/* Doppelt einlesen verhindern (Wunsch Thomas): Jedes Angebot hat einen Schlüssel (Angebotsnummer, sonst Inhalt).
+   Jede Position merkt sich ihr Angebot (offer) und die Menge laut Angebot (oq).
+   - Gleiches Angebot noch einmal (Ordner oder Knopf): nichts passiert.
+   - Gleiche Nummer, anderer Inhalt (überarbeitetes Angebot): die Positionen dieses Angebots werden ersetzt,
+     von Hand getroffene Zuordnungen bleiben (gleicher Text), Positionen von Hand und Listenänderungen bleiben.
+   - Angebot gehört schon zu einer anderen Veranstaltung: dort aktualisieren statt eine zweite anzulegen. */
+function hashStr(t){ let h=5381; for(let i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return (h>>>0).toString(36); }
+const ekSig = arr => arr.map(x=>normText(x.desc)+'|'+(Number(x.oq ?? x.qty)||0)).join('\n');
+const ekKeyOf = r => r.number ? 'nr:'+normText(r.number) : 'sig:'+hashStr(ekSig(r.items));
+function ekLineKey(l){
+  if(l.offer) return l.offer;
+  const e = ES.ekEvents[l.eventId];   // Positionen aus v47/v48 ohne Schlüssel: gehören zur Angebotsnummer der Veranstaltung
+  return l.src==='angebot' && e && e.offerNo ? 'nr:'+normText(e.offerNo) : '';
+}
+function ekOfferOwner(key, r){
+  const l = live('ekLines').find(x=>!x.list && ekLineKey(x)===key && ES.ekEvents[x.eventId] && !ES.ekEvents[x.eventId].deleted);
+  if(l) return ES.ekEvents[l.eventId];
+  // ältere Veranstaltung ohne Positionen, aber mit derselben Angebotsnummer
+  return r.number ? live('ekEvents').find(e=>normText(e.offerNo)===normText(r.number)) || null : null;
+}
+function ekPutOffer(ev, r, key){
+  const old = ekLinesOf(ev.id).filter(l=>ekLineKey(l)===key);
+  if(old.length && ekSig(old)===ekSig(r.items)) return 'same';
+  const keep = new Map(old.filter(l=>l.how && !['Regel','exakt','ähnlich','Pauschale',''].includes(l.how)).map(l=>[normText(l.desc), l]));
+  const start = old.length ? Math.min(...old.map(l=>l.pos||0))-1 : ekLinesOf(ev.id).reduce((m,l)=>Math.max(m, l.pos||0), 0);
+  old.forEach(l=>del('ekLines', l.id));
+  r.items.forEach((it,i)=>{ const nl = ekLineFrom(it, r.party||ev.party||'', ev.id, start+i+1); nl.offer = key; nl.oq = nl.qty;
+    const k = keep.get(normText(it.desc)); if(k){ nl.articleId = k.articleId; nl.how = k.how; }
+    put('ekLines', nl); });
+  if(!ev.offerNo && r.number) ev.offerNo = r.number;
+  if(!ev.party && r.party) ev.party = r.party;
+  ev.note = ''; put('ekEvents', ev);
+  return old.length ? 'updated' : 'added';
+}
+const ekOfferMsg = (res, ev, r, n) => res==='same' ? `Angebot${r.number?' '+r.number:''} ist schon eingelesen (${ev.name}). Nichts verdoppelt.`
+  : res==='updated' ? `Angebot${r.number?' '+r.number:''} hat sich geändert: Positionen in „${ev.name}“ aktualisiert.` : `${n} Positionen aus dem Angebot übernommen`;
 /* Angebot in eine (von Hand angelegte) Veranstaltung einlesen: Positionen kommen dazu, Name und Datum bleiben.
-   Die Datei wird zur Ablage nach Dropbox Angebote/<Jahr>/ hochgeladen. */
+   Die Datei wird zur Ablage nach Dropbox Angebote/<Jahr>/ hochgeladen (nicht, wenn sie schon eingelesen war). */
 async function ekIntoEvent(file, id){
   const e = ES.ekEvents[id]; if(!e) return;
   const {r} = await ekReadOffer(file);
   if(!r.items.length){ toast('Im Angebot wurden keine Positionen erkannt. Bitte von Hand ergänzen.'); return; }
-  const start = ekLinesOf(id).reduce((m,l)=>Math.max(m, l.pos||0), 0);
-  r.items.forEach((it,i)=>put('ekLines', ekLineFrom(it, r.party||e.party||'', id, start+i+1)));
-  if(!e.offerNo && r.number) e.offerNo = r.number;
-  if(!e.party && r.party) e.party = r.party;
-  e.note = '';
-  if(DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add'); e.file = m.path_display||''; }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
-  put('ekEvents', e); persist();
-  toast(`${r.items.length} Positionen aus dem Angebot übernommen`);
+  const key = ekKeyOf(r), owner = ekOfferOwner(key, r);
+  if(owner && owner.id!==id){ toast(`Angebot${r.number?' '+r.number:''} gehört schon zur Veranstaltung „${owner.name}“. Nicht doppelt eingelesen.`); return; }
+  const res = ekPutOffer(e, r, key);
+  if(res!=='same' && DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add'); e.file = m.path_display||''; put('ekEvents', e); }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
+  persist();
+  toast(ekOfferMsg(res, e, r, r.items.length));
 }
 async function ekFromFile(file, dbxPath){
   const {r, off} = await ekReadOffer(file);
+  const key = ekKeyOf(r), owner = r.items.length ? ekOfferOwner(key, r) : null;
+  if(owner){ const res = ekPutOffer(owner, r, key); persist(); ekLastMsg = ekOfferMsg(res, owner, r, r.items.length); return owner; }
   const baseName = off.title || r.party || file.name.replace(/\.[^.]+$/,'');
-  const dup = r.number && live('ekEvents').some(e=>e.offerNo===r.number);
-  const ev = put('ekEvents', {id:uid(), name: baseName + (dup ? ' (Angebot erneut)' : ''), date: off.eventDate || r.date || today(),
+  const ev = put('ekEvents', {id:uid(), name: baseName, date: off.eventDate || r.date || today(),
     party: r.party||'', offerNo: r.number||'', file: dbxPath||'', note: r.items.length ? '' : 'Angebot nicht lesbar. Positionen bitte von Hand ergänzen.'});
-  r.items.forEach((it,i)=>put('ekLines', ekLineFrom(it, r.party||'', ev.id, i+1)));
-  persist();
+  if(r.items.length) ekPutOffer(ev, r, key);
+  persist(); ekLastMsg = `Angebot eingelesen: ${ev.name}`;
   return ev;
 }
 function ekRefresh(){ if(view==='einkauf' && !isTyping()) $('#view').innerHTML = vEinkauf(); else if(view==='einkauf'){ const m=$('#ekScanMsg'); if(m) m.textContent=ekScanMsg; } }
