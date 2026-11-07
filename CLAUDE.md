@@ -101,6 +101,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 
 ## Offene Ideen / nächste Etappen
 
+0. **Lager Etappe 2** – echter Bestand und erweiterte Artikeldaten: siehe `docs/lager-etappe2.md`.
 1. **Packliste** (neuer Menüpunkt):
    - Produkte aus mehreren Lagerpositionen, z. B. Zuckerwatte = Maschine, Zucker, Stäbe, Dosierer.
    - Produkt antippen → Bestand jeder zugehörigen Position, knappe Positionen markiert.
