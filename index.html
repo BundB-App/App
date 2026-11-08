@@ -1397,17 +1397,11 @@ function vBestand(){
   const st = stockMap();
   const all = live('articles');
   const low = all.filter(a=>(st[a.id]||0) < 0 || (a.min>0 && (st[a.id]||0) <= a.min));
-  const value = all.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
   const q = normText(search);
   const shown = all.filter(a=>artMatch(a,q) && (!bKind || q || kindOf(a)===bKind));
   let html = `<div class="stack">
-    <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())}</div><h1>Bestand</h1></div>
-      <button class="btn primary" data-act="addArt">+ Artikel</button></div>
-    <div class="stats">
-      <div class="stat"><span class="eyebrow">Artikel</span><b class="num">${all.length}</b></div>
-      <div class="stat"><span class="eyebrow">Knapp</span><b class="num" style="color:${low.length?'var(--warn)':'inherit'}">${low.length}</b></div>
-      <div class="stat"><span class="eyebrow">Lagerwert</span><b class="num">${eur(value).replace(/,\d\d\s/,' ')}</b></div>
-    </div>`;
+    <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())} · ${all.length} Artikel</div><h1>Bestand</h1></div>
+      <button class="btn primary" data-act="addArt">+ Artikel</button></div>`;
   if(addingArt) html += `<form class="panel stack" id="artForm">
       <h3>Neuer Artikel</h3>
       <div class="grid">
