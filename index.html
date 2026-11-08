@@ -673,8 +673,10 @@ function merge(a,b,colls=COLLS,empty=emptyState){
   return out;
 }
 function dropBefore(st, t, colls=COLLS){ for(const c of colls){ for(const id of Object.keys(st[c]||{})){ if((st[c][id].updatedAt||0) <= t) delete st[c][id]; } } }
+/* Bestand heute: Buchungen mit Datum in der Zukunft zählen erst ab ihrem Tag
+   (Reservierungen buchen die Entnahme auf den ersten Tag des Zeitraums, die Rückgabe auf den Tag danach). */
 function stockMap(){
-  const m={}; for(const mv of live('movements')) m[mv.articleId]=(m[mv.articleId]||0)+Number(mv.qty||0);
+  const m={}, t=today(); for(const mv of live('movements')) if(!mv.date || mv.date<=t) m[mv.articleId]=(m[mv.articleId]||0)+Number(mv.qty||0);
   return m;
 }
 const fmt = (n,d=2) => (Math.round(n*1000)/1000).toLocaleString('de-DE',{maximumFractionDigits:d});
@@ -1889,7 +1891,7 @@ function ekResOthers(id){ return rvOthers(id).taken; }   // Leistungen: was ande
 function ekCalc(id){
   const st = stockMap(); const fam = new Map();
   for(const m of ekTookMv(id)) st[m.articleId] = (st[m.articleId]||0) - Number(m.qty||0);
-  const resO = ekResOthers(id), ownRv = rvOwned(st);
+  const resO = ekResOthers(id), ownRv = rvOwned();
   for(const l of ekLinesOf(id)){
     if(!ekSure(l) || l.articleId==='skip') continue;
     const a = S.articles[l.articleId]; const q = Number(l.qty)||0; if(!(q>0)) continue;
@@ -2022,7 +2024,7 @@ function ekPutOffer(ev, r, key, opt={}){
   // Korrektur mit anderem Veranstaltungsdatum: übernehmen (Wunsch Thomas)
   if(old.length && opt.off && opt.off.eventDate && opt.off.eventDate!==ev.date){ ev.dateMsg = ` Datum geändert: ${dDE(ev.date)} → ${dDE(opt.off.eventDate)}.`; ev.date = opt.off.eventDate; }
   if(opt.off && opt.off.from && opt.off.to && (!ev.from || old.length)){ if(old.length && (ev.from!==opt.off.from || ev.to!==opt.off.to) && ev.from) ev.dateMsg = (ev.dateMsg||'') + ` Mietzeitraum jetzt ${dDE(opt.off.from)} – ${dDE(opt.off.to)}.`; ev.from = opt.off.from; ev.to = opt.off.to; }
-  if(old.length && ev.rv && !ev.rv.back){ put('ekEvents', ev); rvTake(ev.id); ev.dateMsg = (ev.dateMsg||'') + ' Reservierung angepasst.'; }
+  if(old.length && rvActive(ev)){ put('ekEvents', ev); rvTake(ev.id); ev.dateMsg = (ev.dateMsg||'') + ' Reservierung angepasst.'; }
   put('ekEvents', ev);
   // Schon aus dem Lager entnommen: Entnahme an den neuen Bedarf anpassen
   ev.retook = false;
@@ -2230,13 +2232,15 @@ async function ekPdf(id){
 /* Leistungen (Geräte, Gläser, Zelte …) einer Veranstaltung für ihren Zeitraum von–bis (Mietzeitraum, sonst Datum).
    Gleiche Bedarfsliste wie Einkauf/Packliste (ekLines), dazu Leistungen aus Produktgruppen.
    „Aus Lager entnehmen“ (e.rv) bucht die Leistungen aus und gibt der Veranstaltung Vorrang; nach Ende des Zeitraums
-   bucht rvAutoReturn sie automatisch zurück. Buchungen mit fester ID (rv|Veranstaltung|Artikel|out/back), damit zwei
+   ist es automatisch zurück (Rückgabe ist schon beim Entnehmen auf den Tag nach dem Zeitraum gebucht). Buchungen mit fester ID (rv|Veranstaltung|Artikel|out/back), damit zwei
    Geräte nichts doppelt buchen. Konflikt: im Zeitraum mehr gebraucht, als nach den Entnahmen anderer frei ist. */
 let rvId = null;
 const rvFrom = e => e.from || e.date || '';
 const rvTo = e => e.to || e.date || rvFrom(e);
 const rvOverlap = (a, b) => rvFrom(a) <= rvTo(b) && rvFrom(b) <= rvTo(a);
-const rvActive = e => !!(e && e.rv && !e.rv.back);
+const rvDone = e => !!(e && e.rv && (e.rv.back || rvTo(e) < today()));   // Zeitraum vorbei: wieder im Lager
+const rvActive = e => !!(e && e.rv && !rvDone(e));
+const dayAfter = d => { const x=new Date(d+'T12:00'); x.setDate(x.getDate()+1); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
 /* Bedarf an Leistungen je Artikel (ohne Pauschalen/Stunden; Produktgruppen-Leistungen mitgerechnet) */
 function rvNeed(id){
   const need = {}, from = {};
@@ -2249,9 +2253,10 @@ function rvNeed(id){
   return {need, from};
 }
 /* Eigenes Lager eines Geräts = Bestand + alles, was gerade für Veranstaltungen draußen ist */
-function rvOwned(st){
-  const own = {...st};
-  for(const e of live('ekEvents')) if(rvActive(e)) for(const [a,q] of Object.entries(e.rv.items||{})) own[a] = (own[a]||0) + Number(q||0);
+function rvOwned(){
+  // Eigener Gerätebestand ohne Reservierungsbuchungen (die stecken als Entnahmen anderer in rvOthers)
+  const own = {}, t = today();
+  for(const mv of live('movements')) if(!mv.rvId && (!mv.date || mv.date<=t)) own[mv.articleId] = (own[mv.articleId]||0) + Number(mv.qty||0);
   return own;
 }
 /* Was andere Veranstaltungen im selben Zeitraum schon entnommen haben (Vorrang) bzw. nur geplant haben */
@@ -2264,7 +2269,7 @@ function rvOthers(id){
   return {taken, planned, by};
 }
 function rvCalc(id){
-  const e = ES.ekEvents[id], {need, from} = rvNeed(id), own = rvOwned(stockMap()), o = rvOthers(id);
+  const e = ES.ekEvents[id], {need, from} = rvNeed(id), own = rvOwned(), o = rvOthers(id);
   const rows = Object.entries(need).map(([aid, q])=>{ const a = S.articles[aid];
     const free = Math.max(0, (own[aid]||0) - (o.taken[aid]||0));
     const mine = e.rv && e.rv.items ? Number(e.rv.items[aid]||0) : 0;
@@ -2274,17 +2279,21 @@ function rvCalc(id){
     return {a, need:q, free, own: Math.max(0, own[aid]||0), mine, conflict, short: !conflict && q > free + 1e-9, tight: !rvActive(e) && q <= free + 1e-9 && q + (o.planned[aid]||0) > free + 1e-9,
       others: o.by[aid]||[], from: from[aid] ? [...from[aid]] : [], cat: a.category||'ohne Gruppe'}; });
   rows.sort((x,y)=>x.cat.localeCompare(y.cat,'de')||x.a.name.localeCompare(y.a.name,'de'));
-  const changed = e.rv && !e.rv.back && rows.some(r=>Math.abs(Math.min(r.need, r.free) - r.mine)>1e-9) || (e.rv && !e.rv.back && Object.keys(e.rv.items||{}).some(a=>!need[a]));
+  const changed = rvActive(e) && rows.some(r=>Math.abs(Math.min(r.need, r.free) - r.mine)>1e-9) || (rvActive(e) && Object.keys(e.rv.items||{}).some(a=>!need[a]));
   return {rows, conflicts: rows.filter(r=>r.conflict), tight: rows.filter(r=>r.tight), changed, open: ekOpenCount(id)};
 }
 const rvMvId = (id, a, k) => `rv|${id}|${a}|${k}`;
+/* Entnahme nur für den Zeitraum (Wunsch Thomas): Abgang am ersten Tag, Rückgabe am Tag nach dem Ende, beide sofort gebucht.
+   Der Bestand sinkt damit erst im Zeitraum und ist danach von selbst wieder da. */
 function rvTake(id){
   const e = ES.ekEvents[id]; if(!e) return;
-  if(e.rv && !e.rv.back) rvUntake(id, true);
-  const c = rvCalc(id), items = {};
+  const at = e.rv && !e.rv.back ? e.rv.at : now();
+  if(e.rv) rvUntake(id, true);
+  const c = rvCalc(id), items = {}, d0 = rvFrom(e), d1 = dayAfter(rvTo(e));
   for(const r of c.rows){ const q = Math.min(r.need, r.free); if(q>0){ items[r.a.id] = q;
-    put('movements', {id:rvMvId(id, r.a.id, 'out'), articleId:r.a.id, qty:-q, type:'manual', reason:'Entnahme Reservierung', date:today(), note:e.name, rvId:id}); } }
-  e.rv = {at:now(), items}; put('ekEvents', e); persist();
+    put('movements', {id:rvMvId(id, r.a.id, 'out'), articleId:r.a.id, qty:-q, type:'manual', reason:'Reservierung (Abgang)', date:d0, note:e.name, rvId:id});
+    put('movements', {id:rvMvId(id, r.a.id, 'back'), articleId:r.a.id, qty:q, type:'manual', reason:'Reservierung (zurück)', date:d1, note:e.name, rvId:id}); } }
+  e.rv = {at, items, v:2}; put('ekEvents', e); persist();
   return c;
 }
 function rvUntake(id, quiet){
@@ -2293,21 +2302,19 @@ function rvUntake(id, quiet){
   e.rv = null; put('ekEvents', e); persist();
   if(!quiet) toast('Entnahme zurückgenommen, Geräte wieder im Lager.');
 }
-/* Nach Ende des Zeitraums automatisch zurück ins Lager (Wunsch Thomas) */
+/* Entnahmen aus v54 (sofort gebucht, Rückgabe per Hintergrundlauf) auf Zeitraum-Buchungen umstellen */
 function rvAutoReturn(){
   let n = 0;
-  for(const e of live('ekEvents')){ if(!rvActive(e) || rvTo(e) >= today()) continue;
-    const day = (()=>{ const d=new Date(rvTo(e)+'T12:00'); d.setDate(d.getDate()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
-    for(const [a,q] of Object.entries(e.rv.items||{})) put('movements', {id:rvMvId(e.id,a,'back'), articleId:a, qty:Number(q), type:'manual', reason:'Rückgabe Reservierung', date:day, note:e.name, rvId:e.id});
-    e.rv = {...e.rv, back:now()}; put('ekEvents', e); n++;
-  }
-  if(n){ persist(); toast(`${n} Veranstaltung${n>1?'en':''} vorbei: Geräte automatisch zurück ins Lager gebucht.`); }
+  for(const e of live('ekEvents')){ if(!e.rv || e.rv.v===2) continue;
+    if(e.rv.back){ e.rv = {...e.rv, v:2}; put('ekEvents', e); } else rvTake(e.id);
+    n++; }
+  if(n) persist();
   return n;
 }
 function rvStatus(e, c){
-  if(c.conflicts.length && !(e.rv && e.rv.back)) return '<span class="pill bad">ACHTUNG Konflikt</span>';
-  if(e.rv && e.rv.back) return '<span class="pill">zurück im Lager</span>';
-  if(e.rv) return '<span class="pill ok">entnommen</span>';
+  if(c.conflicts.length && !rvDone(e)) return '<span class="pill bad">ACHTUNG Konflikt</span>';
+  if(rvDone(e)) return '<span class="pill">zurück im Lager</span>';
+  if(e.rv) return rvFrom(e) > today() ? `<span class="pill ok">entnommen ab ${dDE(rvFrom(e)).slice(0,6)}</span>` : '<span class="pill ok">entnommen</span>';
   if(!c.rows.length) return '<span class="pill">keine Leistungen</span>';
   return c.tight.length || c.rows.some(r=>r.short) ? '<span class="pill warn">reserviert, knapp</span>' : '<span class="pill ok">reserviert</span>';
 }
@@ -2316,7 +2323,7 @@ function vReserv(){
   const evs = live('ekEvents').sort((a,b)=>rvFrom(a).localeCompare(rvFrom(b))||a.name.localeCompare(b.name));
   const up = evs.filter(e=>rvTo(e)>=today()), past = evs.filter(e=>rvTo(e)<today()).reverse();
   const card = e => { const c = rvCalc(e.id);
-    return `<button class="item-card ${c.conflicts.length && !(e.rv&&e.rv.back)?'bad':''}" data-act="rvOpen" data-id="${e.id}"><span><b>${esc(e.name)}</b><br><span class="small muted">${rvSpan(e)}${e.party&&e.party!==e.name?' · '+esc(e.party):''} · ${c.rows.length} Leistungen</span></span>${rvStatus(e, c)}</button>`; };
+    return `<button class="item-card ${c.conflicts.length && !rvDone(e)?'bad':''}" data-act="rvOpen" data-id="${e.id}"><span><b>${esc(e.name)}</b><br><span class="small muted">${rvSpan(e)}${e.party&&e.party!==e.name?' · '+esc(e.party):''} · ${c.rows.length} Leistungen</span></span>${rvStatus(e, c)}</button>`; };
   return `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Geräte &amp; Leistungen</div><h1>Reservierungen</h1></div>
       <button class="btn primary" data-act="ekNew">+ Veranstaltung</button></div>
@@ -2354,7 +2361,7 @@ function vRvEvent(){
   return `<div class="stack">
     <div><a href="#" data-go="reserv" class="back"><span aria-hidden="true">‹</span> Alle Veranstaltungen</a></div>
     <div><div class="eyebrow">${rvSpan(e)}${e.offerNo?' · Angebot '+esc(e.offerNo):''}</div><h1>${esc(e.name)}</h1></div>
-    ${c.conflicts.length && !(e.rv&&e.rv.back) ? `<div class="rv-alert big">ACHTUNG! Konflikt bei ${c.conflicts.length} Leistung${c.conflicts.length>1?'en':''}: Im Zeitraum ist nicht genug im Lager.</div>`:''}
+    ${c.conflicts.length && !rvDone(e) ? `<div class="rv-alert big">ACHTUNG! Konflikt bei ${c.conflicts.length} Leistung${c.conflicts.length>1?'en':''}: Im Zeitraum ist nicht genug im Lager.</div>`:''}
     <div class="panel grid">
       <label class="f">Name<input data-eke="name" value="${esc(e.name)}"></label>
       <label class="f">Veranstaltung am<input type="date" data-eke="date" value="${esc(e.date)}"></label>
@@ -2364,10 +2371,10 @@ function vRvEvent(){
     </div>
     <div class="panel stack">
       <div class="row spread"><h2>Leistungen · ${c.rows.length}</h2>
-        <div class="row" style="gap:8px">${e.rv && e.rv.back ? `<span class="pill">zurück im Lager seit ${new Date(e.rv.back).toLocaleDateString('de-DE')}</span>`
+        <div class="row" style="gap:8px">${rvDone(e) ? `<span class="pill">zurück im Lager seit ${dDE(dayAfter(rvTo(e)))}</span>`
           : e.rv ? `<button class="btn" data-act="rvUntake" data-confirm="Entnahme zurücknehmen?">Entnahme zurücknehmen</button>`
           : `<button class="btn primary" data-act="rvTake" ${c.rows.length?'':'disabled'} data-confirm="Jetzt aus dem Lager ausbuchen?">Aus Lager entnehmen</button>`}</div></div>
-      ${e.rv && !e.rv.back ? `<div class="note ok-note">Aus dem Lager entnommen am ${new Date(e.rv.at).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'})}. Diese Veranstaltung hat Vorrang. Nach dem ${dDE(rvTo(e))} bucht die App alles automatisch zurück ins Lager.${c.changed?` <b>Leistungen haben sich geändert.</b> <button class="btn sm" data-act="rvTake">Entnahme anpassen</button>`:''}</div>`
+      ${rvActive(e) ? `<div class="note ok-note">Für ${rvSpan(e)} aus dem Lager entnommen (gebucht am ${new Date(e.rv.at).toLocaleDateString('de-DE')}). Im Bestand fehlt es nur in diesem Zeitraum, ab ${dDE(dayAfter(rvTo(e)))} ist es automatisch wieder da. Diese Veranstaltung hat Vorrang.${c.changed?` <b>Leistungen haben sich geändert.</b> <button class="btn sm" data-act="rvTake">Entnahme anpassen</button>`:''}</div>`
         : !e.rv ? '<p class="small muted" style="margin:0">Reserviert für den Zeitraum oben. Vorrang bei Knappheit hat, wer zuerst „Aus Lager entnehmen“ tippt.</p>' : ''}
       ${c.open?`<div class="note">${c.open} Angebotsposition${c.open>1?'en sind':' ist'} noch nicht zugeordnet. Zuordnen unter <a href="#" data-act="ekOpen" data-id="${e.id}">Einkauf</a>.</div>`:''}
       ${c.rows.length ? `<div class="ek-buy">${c.rows.map(row).join('')}</div>` : '<div class="small muted">Noch keine Leistungen. Angebot einlesen oder von Hand hinzufügen.</div>'}
@@ -3344,7 +3351,7 @@ document.addEventListener('click', async e=>{
     case 'ekDelLine': del('ekLines',id); persist(); render(); break;
     case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
     case 'ekDel': { const ev=ES.ekEvents[id]; const fl=[ev.file, ...(ev.seen||[])].filter(Boolean);
-      rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht');
+      if(ev.rv) rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht');
       if(DBX.connected) for(const f of fl){ const m=f.match(/^(.*\/Angebote\/\d{4})\/([^/]+)$/i); if(m) DBX.move(f, m[1]+'/Gelöscht/'+m[2]).catch(()=>{}); }
       break; }
     case 'ekReadOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const evId = view==='rvEvent' ? rvId : ekId;
@@ -3498,7 +3505,9 @@ document.addEventListener('change', e=>{
     if(k==='articleId' && S.articles[l.articleId] && !l.unit) l.unit='';
     put('ekLines',l); persist(); if(k==='articleId'||k==='qty'){ const y=scrollY; render(); scrollTo(0,y); } return; }
   if(t.dataset.eke){ const e=ES.ekEvents[view==='rvEvent' ? rvId : ekId]; if(!e) return; const v=t.value.trim(); if(t.dataset.eke!=='party' && !v){ t.value=e[t.dataset.eke]; return; }
-    e[t.dataset.eke]=v; put('ekEvents',e); persist(); if(t.dataset.eke!=='party'){ const y=scrollY; render(); scrollTo(0,y); } return; }
+    e[t.dataset.eke]=v; put('ekEvents',e);
+    if(['date','from','to'].includes(t.dataset.eke) && rvActive(e)){ rvTake(e.id); toast('Zeitraum geändert: Entnahme auf den neuen Zeitraum umgebucht.'); }
+    persist(); if(t.dataset.eke!=='party'){ const y=scrollY; render(); scrollTo(0,y); } return; }
   if(t.dataset.edit){ const a=S.articles[t.dataset.id]; const k=t.dataset.edit;
     if(k==='name' && !t.value.trim()){ t.value=a.name; return; }
     a[k] = ['min','lastPrice'].includes(k) ? (parseNum(t.value)||0) : k==='desc' ? t.value.replace(/\s+$/,'') : t.value.trim(); put('articles',a); persist();
