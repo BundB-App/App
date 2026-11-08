@@ -120,7 +120,11 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-buy{display:grid}
 .t-short{display:none}
 .pill.k-ware{background:var(--accent-soft);color:var(--good)} .pill.k-leistung{background:var(--info-soft);color:var(--info)}
-.item .pills{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.item .pills{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+/* Bestandszeile in festen Spalten: Name | Typ | Menge (rechtsbündig) | Einheit (linksbündig) */
+.item.art>button.head{grid-template-columns:minmax(0,1fr) 92px 72px 78px;gap:10px}
+.item.art .unit{font:500 13px var(--f-body);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){ .item.art>button.head{grid-template-columns:minmax(0,1fr) 70px 46px 58px;gap:6px;padding:10px 10px 10px 12px} .item.art .qty{font-size:22px} .item.art .pill{font-size:10px;padding:3px 5px} }
 .rv-row{display:grid;grid-template-columns:minmax(0,1fr) 84px minmax(70px,auto) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .rv-row:first-child{border-top:0}
 .rv-row.bad{box-shadow:inset 4px 0 0 var(--bad);padding-left:10px}
@@ -1381,11 +1385,11 @@ function bItems(arts){
   return `<div class="list">${arts.map(a=>{
     const s = st[a.id]||0; const isLow = a.min>0 && s<=a.min; const neg = s<0; const k=kindOf(a);
     const pill = `<span class="pills"><span class="pill k-${k}">${KINDS[k]}</span>${neg ? '<span class="pill bad">negativ</span>' : isLow ? '<span class="pill warn">nachbestellen</span>' : ''}</span>`;
-    return `<div class="item ${neg?'neg':isLow?'low':''}">
+    return `<div class="item art ${neg?'neg':isLow?'low':''}">
       <button class="head" data-act="toggleArt" data-id="${a.id}" aria-expanded="${openArt===a.id}">
         <span><span class="name">${esc(a.name)}</span>${a.min?`<br><span class="small muted">min. ${fmt(a.min)}</span>`:''}</span>
-        ${pill||'<span></span>'}
-        <span class="qty num">${fmt(s,3)}<small>${esc(uL(a,s))}</small></span>
+        ${pill}
+        <span class="qty num">${fmt(s,3)}</span><span class="unit">${esc(uL(a,s))}</span>
       </button>
       ${openArt===a.id ? artDetail(a, s) : ''}
     </div>`; }).join('')}</div>`;
