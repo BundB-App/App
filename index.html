@@ -1945,8 +1945,11 @@ function ekCalc(id){
 
 /* Angebote aus Dropbox „Angebote/“ automatisch einlesen. Die Datei wird zuerst nach Angebote/<Jahr>/ verschoben:
    nur das Gerät, dem das Verschieben gelingt, liest sie ein (keine doppelten Veranstaltungen bei zwei offenen Geräten). */
+/* Abgeschaltet seit v61 (Wunsch Thomas): Angebote liegen in einem eigenen Dropbox-Ordner und werden per Dateiauswahl
+   eingelesen („Angebot einlesen“). OFFER_SCAN schaltet das automatische Lesen von Angebote/ wieder ein. */
+const OFFER_SCAN = false;
 async function scanOffers(manual){
-  if(!DBX.connected || ekScanning) return;
+  if(!OFFER_SCAN || !DBX.connected || ekScanning) return;
   ekScanning = true; let found = 0;
   const type = name => ({pdf:'application/pdf', csv:'text/csv', xml:'application/xml'})[name.split('.').pop().toLowerCase()];
   const isOffer = e => e['.tag']==='file' && /\.(pdf|csv|xml)$/i.test(e.name);
@@ -2034,7 +2037,7 @@ const ekOfferMsg = (res, ev, r, n) => res==='same' ? `Angebot${r.number?' '+r.nu
   : (res==='updated' ? `Angebot${r.number?' '+r.number:''}: Positionen in „${ev.name}“ ersetzt.` : `${n} Positionen aus dem Angebot übernommen.`)
     + (ev.dateMsg||'') + (ev.retook ? ' Entnahme aus dem Lager angepasst.' : '');
 /* Angebot in eine (von Hand angelegte) Veranstaltung einlesen: Positionen kommen dazu, Name und Datum bleiben.
-   Die Datei wird zur Ablage nach Dropbox Angebote/<Jahr>/ hochgeladen (nicht, wenn sie schon eingelesen war). */
+   Die Datei bleibt, wo sie ist (keine Kopie in der Dropbox). */
 async function ekIntoEvent(file, id){
   const e = ES.ekEvents[id]; if(!e) return;
   const {r, off} = await ekReadOffer(file);
@@ -2044,8 +2047,7 @@ async function ekIntoEvent(file, id){
   // Hat die Veranstaltung schon ein anderes Angebot: das neue ersetzt alle Angebotspositionen (Positionen von Hand bleiben)
   const hasOther = ekLinesOf(id).some(l=>ekLineKey(l) && ekLineKey(l)!==key);
   const res = ekPutOffer(e, r, key, {replaceAll: hasOther, off: {...off, eventDate: hasOther || ekLinesOf(id).some(l=>ekLineKey(l)===key) ? off.eventDate : ''}});
-  if(res!=='same' && DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add');
-      if(e.file && normText(e.file)!==normText(m.path_display||'')) e.seen = [...new Set([...(e.seen||[]), m.path_display])]; else e.file = m.path_display||''; put('ekEvents', e); }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
+  if(res!=='same'){ e.file = file.name; put('ekEvents', e); }   // Original bleibt, wo es liegt; keine Kopie
   persist();
   toast(ekOfferMsg(res, e, r, r.items.length));
 }
@@ -2058,7 +2060,7 @@ async function ekFromFile(file, dbxPath){
     persist(); ekLastMsg = ekOfferMsg(res, owner, r, r.items.length); return owner; }
   const baseName = off.title || r.party || file.name.replace(/\.[^.]+$/,'');
   const ev = put('ekEvents', {id:uid(), name: baseName, date: off.eventDate || r.date || today(), from: off.from||'', to: off.to||'',
-    party: r.party||'', offerNo: r.number||'', file: dbxPath||'', note: r.items.length ? '' : 'Angebot nicht lesbar. Positionen bitte von Hand ergänzen.'});
+    party: r.party||'', offerNo: r.number||'', file: dbxPath||file.name||'', note: r.items.length ? '' : 'Angebot nicht lesbar. Positionen bitte von Hand ergänzen.'});
   if(r.items.length) ekPutOffer(ev, r, key);
   persist(); ekLastMsg = `Angebot eingelesen: ${ev.name}`;
   return ev;
@@ -2071,9 +2073,8 @@ function ekNewAndScanHtml(){
         <label class="f">Datum<input type="date" id="ek-date" required value="${today()}"></label>
         <label class="f">Kunde (optional)<input id="ek-party"></label></div>
       <div class="row"><button class="btn primary" type="submit">Anlegen</button><button class="btn" type="button" data-act="ekCancelNew">Abbrechen</button></div></form>`:''}
-    ${DBX.connected?`<div class="panel row spread"><span class="small muted">Angebote (PDF) einfach in den Dropbox-Ordner <code>${esc(P('Angebote').replace(/^\//,''))}</code> legen. Die App liest sie beim Öffnen ein und legt die Veranstaltung an.<br><b id="ekScanMsg">${esc(ekScanMsg)}</b></span>
-      <button class="btn sm" data-act="ekScan">Jetzt prüfen</button></div>`
-      :`<div class="note">Dropbox ist nicht verbunden. Angebote werden erst nach dem Verbinden eingelesen; Veranstaltungen von Hand gehen trotzdem.</div>`}`;
+    <div class="panel row spread"><span class="small muted">Angebot (PDF) auswählen, z. B. direkt aus eurem Angebotsordner in der Dropbox. Die App legt die Veranstaltung an. Ist das Angebot schon eingelesen, aktualisiert sie die vorhandene Veranstaltung.</span>
+      <button class="btn primary" data-act="ekImportNew">Angebot einlesen</button></div>`;
 }
 function vEinkauf(){
   const evs = live('ekEvents').sort((a,b)=>(a.date||'').localeCompare(b.date||'')||a.name.localeCompare(b.name));
@@ -3355,6 +3356,11 @@ document.addEventListener('click', async e=>{
       if(ev.rv) rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view = view==='rvEvent' ? 'reserv' : 'einkauf'; render(); toast('Veranstaltung gelöscht');
       if(DBX.connected) for(const f of fl){ const m=f.match(/^(.*\/Angebote\/\d{4})\/([^/]+)$/i); if(m) DBX.move(f, m[1]+'/Gelöscht/'+m[2]).catch(()=>{}); }
       break; }
+    case 'ekImportNew': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const from=view;
+      inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …');
+        let ev; try{ ev = await ekFromFile(f, ''); }catch(err){ toast('Angebot konnte nicht gelesen werden: '+err.message); return; }
+        if(from==='reserv'){ rvId=ev.id; view='rvEvent'; } else { ekId=ev.id; view='ekEvent'; } render(); window.scrollTo(0,0); toast(ekLastMsg); };
+      inp.click(); break; }
     case 'ekReadOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const evId = view==='rvEvent' ? rvId : ekId;
       inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …'); await ekIntoEvent(f, evId); render(); };
       inp.click(); break; }

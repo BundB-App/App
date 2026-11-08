@@ -1,0 +1,9 @@
+{
+  "name": "bundb-app-e2e",
+  "private": true,
+  "type": "module",
+  "description": "UI-Tests (Playwright) für index.html, siehe harness.mjs",
+  "devDependencies": {
+    "playwright": "1.65.0"
+  }
+}
