@@ -27,7 +27,7 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
 :root{
   --bg:#edf0f1; --surface:#ffffff; --sunk:#e4e9eb; --ink:#152029; --muted:#5a6873; --line:#d3dadf;
   --accent:#17684f; --accent-ink:#ffffff; --accent-soft:#dcece5;
-  --warn:#9a5a12; --warn-soft:#f6e8d3; --bad:#b0281f; --bad-soft:#f7dedb; --good:#17684f; --info:#1d5fbf;
+  --warn:#9a5a12; --warn-soft:#f6e8d3; --bad:#b0281f; --bad-soft:#f7dedb; --good:#17684f; --info:#1d5fbf; --info-soft:#dde8f8;
   --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
@@ -37,11 +37,11 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
-  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; color-scheme:dark}}
+  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; --info-soft:#1b2a44; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
-  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; color-scheme:dark}
+  --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; --info-soft:#1b2a44; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{background:var(--bg);color:var(--ink)}
@@ -119,6 +119,8 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
 .t-short{display:none}
+.pill.k-ware{background:var(--accent-soft);color:var(--good)} .pill.k-leistung{background:var(--info-soft);color:var(--info)}
+.item .pills{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 .rv-row{display:grid;grid-template-columns:minmax(0,1fr) 84px minmax(70px,auto) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .rv-row:first-child{border-top:0}
 .rv-row.bad{box-shadow:inset 4px 0 0 var(--bad);padding-left:10px}
@@ -1348,7 +1350,7 @@ let invCounts = {};
 
 /* Liste nach Artikelgruppe gegliedert, Gruppen aufklappbar, Inhalt erst beim Aufklappen.
    Die Suche sucht immer in allen Artikeln (Name, Zweitname, Gruppe, Beschreibung), ohne Typ-Filter (Wunsch Thomas). */
-let hideSvc=false, invQ='';
+let hideSvc=false, invQ='', bKind='';
 const bOpen=new Set(), invOpen=new Set(), GRP={b:{}, inv:{}};
 const grpKey = a => a.category||'ohne Gruppe';
 function groupArts(arts){
@@ -1361,6 +1363,7 @@ function artMatch(a, q){ return !q || normText(a.name+' '+(a.alias||'')+' '+(a.c
 function listControls(id){
   return `<div class="row"><input id="${id}" type="search" placeholder="Suchen (Name, Gruppe, Beschreibung)" value="${esc(id==='search'?search:invQ)}" style="flex:1 1 220px"></div>
     <div class="row" style="gap:8px 14px">
+      <div class="seg" role="group" aria-label="Artikeltyp"><button data-act="bKind" data-k="" aria-pressed="${!bKind}">Alle</button>${Object.entries(KINDS).map(([k,l])=>`<button data-act="bKind" data-k="${k}" aria-pressed="${bKind===k}">${l}</button>`).join('')}</div>
       ${id==='search'?`<label class="row small" style="gap:6px"><input type="checkbox" id="onlyLow" ${onlyLow?'checked':''}> nur Nachbestellen</label>`:''}
       <label class="row small" style="gap:6px"><input type="checkbox" id="hideSvc" ${hideSvc?'checked':''}> Leistungen ohne Bestand ausblenden</label>
     </div>`;
@@ -1377,7 +1380,7 @@ function bItems(arts){
   const st=stockMap();
   return `<div class="list">${arts.map(a=>{
     const s = st[a.id]||0; const isLow = a.min>0 && s<=a.min; const neg = s<0; const k=kindOf(a);
-    const pill = neg ? '<span class="pill bad">negativ</span>' : isLow ? '<span class="pill warn">nachbestellen</span>' : k!=='ware' ? `<span class="pill">${KINDS[k]}</span>` : '';
+    const pill = `<span class="pills"><span class="pill k-${k}">${KINDS[k]}</span>${neg ? '<span class="pill bad">negativ</span>' : isLow ? '<span class="pill warn">nachbestellen</span>' : ''}</span>`;
     return `<div class="item ${neg?'neg':isLow?'low':''}">
       <button class="head" data-act="toggleArt" data-id="${a.id}" aria-expanded="${openArt===a.id}">
         <span><span class="name">${esc(a.name)}</span>${a.min?`<br><span class="small muted">min. ${fmt(a.min)}</span>`:''}</span>
@@ -1393,7 +1396,7 @@ function vBestand(){
   const low = all.filter(a=>(st[a.id]||0) < 0 || (a.min>0 && (st[a.id]||0) <= a.min));
   const value = all.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
   const q = normText(search);
-  const shown = all.filter(a=>artMatch(a,q) && (!onlyLow || low.includes(a))
+  const shown = all.filter(a=>artMatch(a,q) && (!onlyLow || low.includes(a)) && (!bKind || q || kindOf(a)===bKind)
     && (!hideSvc || q || !pureService(a,st) || a.id===openArt));
   const hidden = all.filter(a=>pureService(a,st)).length;
   let html = `<div class="stack">
@@ -1637,7 +1640,7 @@ function vInventur(){
       <p class="small muted" style="margin:0">Spalten: Bezeichnung, Bestand, optional Beschreibung, Artikelgruppe, Artikeltyp (Ware/Leistung), Einheit Einzahl und Mehrzahl, Mindestbestand, EK-Preis. Der Bestand wird auf den Wert aus der Tabelle gesetzt, leere Zellen ändern nichts.</p></div>`;
   if(!all.length) return `<div class="stack"><div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>${importBox}<div class="panel empty">Noch keine Artikel angelegt.</div></div>`;
   const q = normText(invQ);
-  const arts = all.filter(a=>artMatch(a,q) && (!hideSvc || q || !pureService(a,st)));
+  const arts = all.filter(a=>artMatch(a,q) && (!bKind || q || kindOf(a)===bKind) && (!hideSvc || q || !pureService(a,st)));
   const counted = Object.values(invCounts).filter(v=>v!==''&&v!=null).length;
   return `<div class="stack">
     <div><a href="#" data-go="setup" class="back"><span aria-hidden="true">‹</span> Einstellungen</a></div><div><div class="eyebrow">Zählung</div><h1>Inventur</h1></div>
@@ -2167,7 +2170,7 @@ function vEkEvent(){
       ${ekPdfOut && ekPdfOut.id===e.id ? `<div class="row" style="gap:8px"><span class="small muted">${esc(ekPdfOut.where)}</span>
         ${ekPdfOut.share?'<button class="btn sm" data-act="ekShare">Teilen</button>':''}<button class="btn sm" data-act="ekDownload">Herunterladen</button></div>`:''}
     </div>
-    <div class="row"><button class="btn sm danger" data-act="ekDel" data-id="${e.id}" data-confirm="Veranstaltung löschen?">Veranstaltung löschen</button></div>
+    <div class="row"><button class="btn sm danger" data-act="ekDel" data-id="${e.id}" data-confirm="Veranstaltung löschen? (auch in Reservierungen und Packliste)">Veranstaltung löschen</button></div>
   </div>`;
 }
 
@@ -2383,6 +2386,7 @@ function vRvEvent(){
         <button class="btn sm danger" data-act="ekDelLine" data-id="${l.id}" aria-label="Entfernen">✕</button></div>`).join('')}
       <div class="row"><button class="btn sm" data-act="rvAddLine">+ Leistung</button><button class="btn sm" data-act="ekReadOffer">Angebot einlesen</button></div>
     </div>
+    <div class="row"><button class="btn sm danger" data-act="ekDel" data-id="${e.id}" data-confirm="Veranstaltung löschen? (auch in Einkauf und Packliste)">Veranstaltung löschen</button></div>
   </div>`;
 }
 
@@ -3329,6 +3333,7 @@ document.addEventListener('click', async e=>{
       if(!(q>0)){ toast('Bitte eine Menge je Einheit eingeben.'); return; }
       a.groups = {...(a.groups||{}), [g.id]:q}; put('articles', a); persist(); render(); toast(`${a.name} gehört jetzt zu „${g.name}“`); break; }
     case 'pgDel': { const a=S.articles[id]; const gs={...(a.groups||{})}; delete gs[el.dataset.g]; a.groups=gs; put('articles', a); persist(); render(); break; }
+    case 'bKind': bKind=el.dataset.k||''; render(); break;
     case 'rvOpen': rvId=id; view='rvEvent'; render(); window.scrollTo(0,0); break;
     case 'rvTake': { const c=rvTake(rvId); const y=scrollY; render(); scrollTo(0,y);
       toast(c && c.conflicts.length ? `Entnommen, aber ACHTUNG: bei ${c.conflicts.length} Leistung${c.conflicts.length>1?'en':''} reicht das Lager nicht.` : 'Leistungen aus dem Lager entnommen. Diese Veranstaltung hat Vorrang.'); break; }
@@ -3351,7 +3356,7 @@ document.addEventListener('click', async e=>{
     case 'ekDelLine': del('ekLines',id); persist(); render(); break;
     case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
     case 'ekDel': { const ev=ES.ekEvents[id]; const fl=[ev.file, ...(ev.seen||[])].filter(Boolean);
-      if(ev.rv) rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht');
+      if(ev.rv) rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view = view==='rvEvent' ? 'reserv' : 'einkauf'; render(); toast('Veranstaltung gelöscht');
       if(DBX.connected) for(const f of fl){ const m=f.match(/^(.*\/Angebote\/\d{4})\/([^/]+)$/i); if(m) DBX.move(f, m[1]+'/Gelöscht/'+m[2]).catch(()=>{}); }
       break; }
     case 'ekReadOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const evId = view==='rvEvent' ? rvId : ekId;
