@@ -119,6 +119,7 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
 .t-short{display:none}
+.save-bar .btn{white-space:nowrap}
 .stats.one{grid-template-columns:minmax(0,220px)}
 .pill.k-ware{background:var(--accent-soft);color:var(--good)} .pill.k-leistung{background:var(--info-soft);color:var(--info)}
 .item .pills{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
@@ -2694,7 +2695,7 @@ function eventFormHtml(ev){
       <div class="small muted" style="margin-top:4px">Gilt erst einmal für alle Kategorien und Tage, unten einzeln anpassbar.</div></div>
     <div id="pe-days" class="stack" style="gap:10px">${peDaysHtml(days)}</div>
     ${ev.id?`<div class="row"><button class="btn danger" type="button" data-act="pDelEvent" data-id="${ev.id}" data-confirm="Event mit allen Einsätzen löschen?">Event löschen</button></div>`:''}
-    <div class="row save-bar"><button class="btn primary" type="submit">${ev.id?'Speichern':'Anlegen'}</button>
+    <div class="row save-bar">${ev.id?'':'<button class="btn" type="button" data-act="peOffer">Angebot einlesen</button>'}<button class="btn primary" type="submit">${ev.id?'Speichern':'Anlegen'}</button>
       <button class="btn" type="button" data-act="${ev.id?'pEditEvent':'pCancelEvent'}">Abbrechen</button></div>
   </form>`;
 }
@@ -3246,6 +3247,15 @@ document.addEventListener('click', async e=>{
     case 'peAddCat': { peReadCats(); const nid = id || 'k'+uid().replace(/-/g,'').slice(0,10); peRoles.push({id:nid, name:id?ROLES[id]:''});
       peRefresh(cur=>cur.forEach(d=>{ if(d.cats) d.cats.push(nid); }));   // neue Kategorie gilt für alle Tage
       if(!id) document.querySelector(`#pe-cats .pc-name[data-id="${nid}"]`)?.focus(); break; }
+    /* Personal: Angebot auswählen und Name + Datum ins neue Event übernehmen (Leistungsdatum; Personal-Events bleiben getrennt von Einkauf) */
+    case 'peOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv';
+      inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …');
+        const {r, off} = await ekReadOffer(f); if(!$('#pEventForm')) return;
+        const name = off.title || r.party || f.name.replace(/\.[^.]+$/,''), date = off.eventDate || r.date || '';
+        $('#pe-name').value = name;
+        if(date){ $('#pe-from').value = date; $('#pe-from').dataset.prev = date; $('#pe-to').value = ''; peRebuild('pe-to'); }
+        toast(`Aus dem Angebot übernommen: ${name}${date?', '+dWD(date):''}${r.party&&r.party!==name?' ('+r.party+')':''}. Kategorien und Zeiten bitte noch ergänzen.`); };
+      inp.click(); break; }
     case 'peDayDel': { const r=el.dataset.r, date=el.dataset.date, ev=PS.events[$('#pEventForm').dataset.id];
       const dd = ev && daysOf(ev).find(x=>x.date===date);
       if(dd && asgOfDay(ev, dd).some(a=>a.role===r)){ toast('An diesem Tag sind in dieser Kategorie noch Personen eingeplant. Erst dort entfernen.'); return; }
