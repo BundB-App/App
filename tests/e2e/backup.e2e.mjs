@@ -9,14 +9,20 @@ const BK = '/bundb app backup/';
 const backups = () => [...files.keys()].filter(k => k.startsWith(BK)).sort();
 const regular = () => backups().filter(k => /\/backup_\d{4}-\d{2}-\d{2}_\d{4,6}\.json$/.test(k));
 
-// 1) Automatisch beim Öffnen, außerhalb des geteilten Ordners
-const A = await device(); const pa = A.page;
+// 0) Standard: aus. Ohne Einschalten kein Backup
+const Z = await device(); await Z.page.waitForTimeout(2500); assert.equal(backups().length, 0);
+await Z.page.click('[data-go="lager"]'); await Z.page.click('#tabs [data-go="setup"]');
+assert.equal(await Z.page.isChecked('#bk-on'), false); assert.equal(await Z.page.$('[data-act=bkNow]'), null); ok('Standard: Backup aus, kein Backup angelegt, nur der Schalter sichtbar');
+await Z.page.check('#bk-on'); await Z.page.waitForFunction(() => bkList && bkList.length === 1 && !bkBusy, null, { timeout: 20000 });
+assert.equal(regular().length, 1); ok('Einschalten: erstes Backup sofort angelegt'); files.delete(regular()[0]); await Z.ctx.close();
+// 1) Automatisch beim Öffnen, außerhalb des geteilten Ordners (Gerät mit eingeschaltetem Backup)
+const A = await device({ cfg: { bkOn: true } }); const pa = A.page;
 await pa.waitForFunction(() => !bkBusy && bkList && bkList.length === 1, null, { timeout: 20000 });
 assert.equal(regular().length, 1); assert.ok(!regular()[0].startsWith(BASE)); ok('Beim Öffnen automatisch gesichert: ' + files.get(regular()[0]).display);
 const bk1 = JSON.parse(files.get(regular()[0]).body.toString());
 assert.equal(bk1.kind, 'backup'); assert.ok(Object.keys(bk1.lager.articles).length >= 394 && bk1.personal.persons && bk1.einkauf.ekEvents); ok('Backup enthält Lager, Personal und Einkauf (' + Math.round(files.get(regular()[0]).body.length / 1000) + ' KB)');
 // 2) Zweites Gerät desselben Kontos: nicht doppelt
-const B = await device({ viewport: { width: 390, height: 844 }, scheme: 'dark' }); const pb = B.page;
+const B = await device({ viewport: { width: 390, height: 844 }, scheme: 'dark', cfg: { bkOn: true } }); const pb = B.page;
 await pb.waitForTimeout(2500); assert.equal(regular().length, 1); ok('Zweites Gerät (iPhone): kein doppeltes Backup, wöchentlich noch nicht fällig');
 
 // 3) Fälligkeit und Aufräumen: 15 alte wöchentliche Backups, behalten 13

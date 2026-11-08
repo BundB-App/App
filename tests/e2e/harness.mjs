@@ -87,11 +87,11 @@ async function routes(ctx, html) {
 }
 export const browser = await chromium.launch();
 /** Ein Gerät (eigener Browser-Kontext mit eigenem localStorage), mit Dropbox verbunden und synchronisiert */
-export async function device({ html = NEW, origin = 'http://app.test/', viewport, scheme = 'light' } = {}) {
+export async function device({ html = NEW, origin = 'http://app.test/', viewport, scheme = 'light', cfg = {} } = {}) {
   const ctx = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 }, colorScheme: scheme });
   await routes(ctx, html);
   await ctx.addInitScript(cfg => { if (!localStorage.getItem('bb-lager-cfg-v1')) localStorage.setItem('bb-lager-cfg-v1', cfg); },
-    JSON.stringify({ appKey: 'k', base: '/Apps/BundB App', refresh: 'r', access: 'tok', accessExp: Date.now() + 3e6, lastSync: 1, ownName: 'B&B' }));
+    JSON.stringify({ appKey: 'k', base: '/Apps/BundB App', refresh: 'r', access: 'tok', accessExp: Date.now() + 3e6, lastSync: 1, ownName: 'B&B', ...cfg }));
   const page = await ctx.newPage();
   page.on('pageerror', e => errors.push(origin + ' ' + e.message));
   page.on('console', m => { if (m.type() === 'error' && !/status of 409/.test(m.text())) errors.push(origin + ' console: ' + m.text()); });

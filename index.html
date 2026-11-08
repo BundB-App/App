@@ -54,6 +54,8 @@ header.top .wrap{display:flex;align-items:center;gap:16px;padding-block:10px}
 .brand small{font:500 11px/1 var(--f-body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-left:6px}
 nav.tabs{display:flex;gap:2px;margin-left:auto}
 nav.tabs button{background:none;border:0;padding:8px 12px;border-radius:8px;font:500 14px var(--f-body);color:var(--muted);cursor:pointer}
+nav.tabs button[data-bad]:not([data-bad=""]){box-shadow:inset 0 0 0 2px var(--bad)}
+nav.tabs button[data-bad]:not([data-bad=""])::after{content:attr(data-bad);display:inline-block;margin-left:4px;min-width:16px;padding:1px 4px;border-radius:9px;background:var(--bad);color:#fff;font:700 10.5px/1.3 var(--f-body);text-align:center}
 nav.tabs button[data-badge]:not([data-badge=""])::after{content:attr(data-badge);display:inline-block;margin-left:5px;min-width:18px;padding:2px 5px;border-radius:9px;background:var(--warn);color:var(--surface);font:600 11px/1.2 var(--f-body);text-align:center}
 select.need{border-color:var(--warn)}
 .split{display:grid;gap:14px}
@@ -822,6 +824,7 @@ async function sync(){
     if(JSON.stringify({...S,meta:0}) !== JSON.stringify({...JSON.parse(before),meta:0})
       || JSON.stringify({...PS,meta:0}) !== JSON.stringify({...JSON.parse(pBefore),meta:0})
       || JSON.stringify({...ES,meta:0}) !== JSON.stringify({...JSON.parse(eBefore),meta:0})) softRender();
+    rvBadge();
   }catch(e){ setSync('err', e.message); }
   syncing=false;
   if(syncAgain){ syncAgain=false; sync(); }
@@ -2267,7 +2270,7 @@ async function bkPrune(){
 }
 /* Beim Öffnen: fällig? Dann still sichern und aufräumen. */
 async function bkAuto(){
-  if(!DBX.connected || bkBusy || syncState.s==='err') return;
+  if(!CFG.bkOn || !DBX.connected || bkBusy || syncState.s==='err') return;   // nur wenn auf diesem Gerät eingeschaltet (Wunsch Thomas)
   try{
     const list = await bkLoadList(), last = list.filter(e=>bkIsRegular(e.name)).map(e=>bkDateOf(e.name)).filter(Boolean)[0];
     const days = BK_INT[bkInterval()][1];
@@ -2327,12 +2330,16 @@ async function bkProgram(){
   bkProg = {name, url:URL.createObjectURL(zip), where};
 }
 function bkPanel(){
-  if(!DBX.connected) return `<div class="panel stack"><h2>Backup</h2><p class="small muted" style="margin:0">Backups brauchen die Dropbox-Verbindung (unten unter „Ganze App“).</p></div>`;
+  const toggle = `<label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="bk-on" ${CFG.bkOn?'checked':''} style="margin-top:2px">
+      <span><b>Backup auf diesem Gerät einschalten</b><br><span class="small muted">Für die Hauptnutzer. Sichert automatisch Lager, Personal und Einkauf in die eigene Dropbox (Ordner <code>${BK_DIR.slice(1)}</code>). Einmal pro Dropbox-Konto genügt, z. B. am Mac.</span></span></label>`;
+  if(!CFG.bkOn) return `<div class="panel stack"><div class="row spread"><h2>Backup</h2><span class="pill">aus</span></div>${toggle}</div>`;
+  if(!DBX.connected) return `<div class="panel stack"><h2>Backup</h2>${toggle}<p class="small muted" style="margin:0">Backups brauchen die Dropbox-Verbindung (unten unter „Ganze App“).</p></div>`;
   if(bkList===null){ bkLoadList().then(()=>{ if(view==='setup' && !isTyping()) render(); }); }
   const reg = (bkList||[]).filter(e=>/\.json$/i.test(e.name));
   const last = reg.filter(e=>bkIsRegular(e.name))[0];
   const kb = n => n>1e6 ? (n/1e6).toFixed(1).replace('.',',')+' MB' : Math.round(n/1e3)+' KB';
   return `<div class="panel stack"><div class="row spread"><h2>Backup</h2>${bkBusy?'<span class="pill">läuft …</span>':last?`<span class="pill ok">zuletzt ${dDE(last.name.slice(7,17))}</span>`:'<span class="pill warn">noch keins</span>'}</div>
+    ${toggle}
     <p class="small muted" style="margin:0">Sichert Lager, Personal und Einkauf (Veranstaltungen, Listen) in deine eigene Dropbox, Ordner <code>${BK_DIR.slice(1)}</code>. Der liegt außerhalb des geteilten Ordners, versehentliches Löschen dort trifft ihn nicht. Die App sichert beim Öffnen, sobald ein Backup fällig ist, und löscht dann die ältesten über der eingestellten Anzahl.</p>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="f">Wie oft<select id="bk-int">${Object.entries(BK_INT).map(([k,[l]])=>`<option value="${k}" ${bkInterval()===k?'selected':''}>${l}</option>`).join('')}</select></label>
@@ -2435,6 +2442,12 @@ function rvAutoReturn(){
     n++; }
   if(n) persist();
   return n;
+}
+/* Roter Punkt am Menüpunkt Reservierungen, solange eine kommende Veranstaltung einen Konflikt hat */
+function rvBadge(){
+  const b = document.querySelector('#tabs [data-go="reserv"]'); if(!b) return;
+  let n = 0; try{ for(const e of live('ekEvents')) if(rvTo(e)>=today() && !rvDone(e) && rvCalc(e.id).conflicts.length) n++; }catch(err){}
+  b.dataset.bad = n ? String(n) : ''; b.title = n ? `${n} Veranstaltung${n>1?'en':''} mit Konflikt` : '';
 }
 function rvStatus(e, c){
   if(c.conflicts.length && !rvDone(e)) return '<span class="pill bad">ACHTUNG Konflikt</span>';
@@ -3284,6 +3297,7 @@ function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current', b.dataset.go===tab?'page':'false'));
   $('#view').innerHTML = VIEWS[view]();
   const bb=document.querySelector('#tabs [data-go="belege"]'); if(bb) bb.dataset.badge = QUEUE.length ? String(QUEUE.length) : '';
+  rvBadge();
   if(view==='belege' && !IMP && !busyMsg) bindDrop();
 }
 function softRender(){
@@ -3606,6 +3620,7 @@ document.addEventListener('change', e=>{
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='hideSvc'){ hideSvc=t.checked; render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
+  if(t.id==='bk-on'){ CFG.bkOn=t.checked; saveCfg(); render(); if(t.checked){ toast('Backup eingeschaltet'); bkAuto(); } else toast('Backup auf diesem Gerät ausgeschaltet'); return; }
   if(t.id==='bk-int'){ CFG.bkInterval=t.value; saveCfg(); render(); return; }
   if(t.id==='bk-keep'){ const n=parseInt(t.value,10); CFG.bkKeep = n>0 ? Math.min(200,n) : 13; saveCfg(); render(); return; }
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
