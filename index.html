@@ -1368,8 +1368,7 @@ function listControls(id){
   return `<div class="row"><input id="${id}" type="search" placeholder="Suchen (Name, Gruppe, Beschreibung)" value="${esc(id==='search'?search:invQ)}" style="flex:1 1 220px"></div>
     <div class="row" style="gap:8px 14px">
       <div class="seg" role="group" aria-label="Artikeltyp"><button data-act="bKind" data-k="" aria-pressed="${!bKind}">Alle</button>${Object.entries(KINDS).map(([k,l])=>`<button data-act="bKind" data-k="${k}" aria-pressed="${bKind===k}">${l}</button>`).join('')}</div>
-      ${id==='search'?`<label class="row small" style="gap:6px"><input type="checkbox" id="onlyLow" ${onlyLow?'checked':''}> nur Nachbestellen</label>`:''}
-      <label class="row small" style="gap:6px"><input type="checkbox" id="hideSvc" ${hideSvc?'checked':''}> Leistungen ohne Bestand ausblenden</label>
+      ${id==='search'?'':`<label class="row small" style="gap:6px"><input type="checkbox" id="hideSvc" ${hideSvc?'checked':''}> Leistungen ohne Bestand ausblenden</label>`}
     </div>`;
 }
 function grpHtml(set, g, body, extra){
@@ -1400,9 +1399,7 @@ function vBestand(){
   const low = all.filter(a=>(st[a.id]||0) < 0 || (a.min>0 && (st[a.id]||0) <= a.min));
   const value = all.reduce((s,a)=>s + Math.max(0,st[a.id]||0)*(a.lastPrice||0), 0);
   const q = normText(search);
-  const shown = all.filter(a=>artMatch(a,q) && (!onlyLow || low.includes(a)) && (!bKind || q || kindOf(a)===bKind)
-    && (!hideSvc || q || !pureService(a,st) || a.id===openArt));
-  const hidden = all.filter(a=>pureService(a,st)).length;
+  const shown = all.filter(a=>artMatch(a,q) && (!bKind || q || kindOf(a)===bKind));
   let html = `<div class="stack">
     <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())}</div><h1>Bestand</h1></div>
       <button class="btn primary" data-act="addArt">+ Artikel</button></div>
@@ -1433,7 +1430,6 @@ function vBestand(){
     const groups = groupArts(shown);
     html += groups.map(g=>{ const nl=g.arts.filter(a=>low.includes(a)).length;
       return grpHtml('b', g, bItems, `${g.arts.length}${nl?` · <span style="color:var(--warn)">${nl} knapp</span>`:''}`); }).join('') || `<div class="panel empty">Keine Treffer.</div>`;
-    if(hidden && hideSvc && !q) html += `<p class="small muted" style="margin:0">${hidden} Leistungen ohne Bestand sind ausgeblendet. Bei Belegen bleiben sie wählbar.</p>`;
   }
   return html + `</div>`;
 }
