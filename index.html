@@ -1832,7 +1832,7 @@ function ekLineFrom(it, party, eventId, pos){
   return {id:uid(), eventId, desc:it.desc, qty:Number(it.qty)||0, unit:it.unit||'', articleId, how, src:'angebot', pos};
 }
 
-function ekTake(id){
+function ekTake(id, quiet){
   const e = ES.ekEvents[id]; if(!e || e.took) return;
   const c = ekCalc(id); let n = 0; const res = {};
   for(const r of c.rows){
@@ -1841,7 +1841,7 @@ function ekTake(id){
     if(r.res>0) res[r.famId] = r.res;
   }
   e.took = {at:now(), res}; put('ekEvents', e); persist();
-  toast(n || Object.keys(res).length ? `Aus Lager entnommen: ${n} Buchungen${Object.keys(res).length?`, ${Object.keys(res).length} Geräte reserviert`:''}` : 'Nichts im Lager, nichts entnommen.');
+  if(!quiet) toast(n || Object.keys(res).length ? `Aus Lager entnommen: ${n} Buchungen${Object.keys(res).length?`, ${Object.keys(res).length} Geräte reserviert`:''}` : 'Nichts im Lager, nichts entnommen.');
 }
 function ekUntake(id){
   const e = ES.ekEvents[id]; if(!e) return;
@@ -1952,9 +1952,10 @@ async function scanOffers(manual){
     }
     // 2) Nur über „Jetzt prüfen“ (vorher wird synchronisiert, damit ein zweites Gerät nichts doppelt anlegt):
     //    Angebote, die direkt in einen Jahresordner gelegt wurden (Angebote/2026/…) und noch zu keiner Veranstaltung gehören.
-    //    Auch gelöschte Veranstaltungen zählen, damit ein gelöschtes Angebot nicht wiederkommt.
+    //    Nur bestehende Veranstaltungen zählen. Beim Löschen einer Veranstaltung wandert ihr Angebot nach Angebote/<Jahr>/Gelöscht/,
+    //    damit es nicht von selbst wiederkommt; wer es wieder in Angebote/ oder Angebote/<Jahr>/ legt, bekommt es neu eingelesen.
     if(manual){
-    const known = new Set(Object.values(ES.ekEvents).flatMap(e=>[e.file, ...(e.seen||[])]).map(x=>normText(x||'')).filter(Boolean));
+    const known = new Set(live('ekEvents').flatMap(e=>[e.file, ...(e.seen||[])]).map(x=>normText(x||'')).filter(Boolean));
     for(const d of top.filter(e=>e['.tag']==='folder' && /^\d{4}$/.test(e.name))){
       for(const f of (await DBX.list(d.path_display||d.path_lower)).filter(isOffer)){
         if(known.has(normText(f.path_display||f.path_lower))) continue;
@@ -1994,31 +1995,42 @@ function ekOfferOwner(key, r){
   // ältere Veranstaltung ohne Positionen, aber mit derselben Angebotsnummer
   return r.number ? live('ekEvents').find(e=>normText(e.offerNo)===normText(r.number)) || null : null;
 }
-function ekPutOffer(ev, r, key){
-  const old = ekLinesOf(ev.id).filter(l=>ekLineKey(l)===key);
-  if(old.length && ekSig(old)===ekSig(r.items)) return 'same';
+/* replaceAll: Angebot mit neuer Nummer ersetzt alle bisherigen Angebotspositionen der Veranstaltung (Wunsch Thomas).
+   off: Angaben aus dem Angebot (Veranstaltungsdatum) für Korrekturen. */
+function ekPutOffer(ev, r, key, opt={}){
+  const old = ekLinesOf(ev.id).filter(l=> opt.replaceAll ? !!ekLineKey(l) : ekLineKey(l)===key);
+  if(old.length && ekLineKey(old[0])===key && old.every(l=>ekLineKey(l)===key) && ekSig(old)===ekSig(r.items)) return 'same';
   const keep = new Map(old.filter(l=>l.how && !['Regel','exakt','ähnlich','Pauschale',''].includes(l.how)).map(l=>[normText(l.desc), l]));
   const start = old.length ? Math.min(...old.map(l=>l.pos||0))-1 : ekLinesOf(ev.id).reduce((m,l)=>Math.max(m, l.pos||0), 0);
   old.forEach(l=>del('ekLines', l.id));
   r.items.forEach((it,i)=>{ const nl = ekLineFrom(it, r.party||ev.party||'', ev.id, start+i+1); nl.offer = key; nl.oq = nl.qty;
     const k = keep.get(normText(it.desc)); if(k){ nl.articleId = k.articleId; nl.how = k.how; }
     put('ekLines', nl); });
-  if(!ev.offerNo && r.number) ev.offerNo = r.number;
+  if(r.number && (opt.replaceAll || !ev.offerNo)) ev.offerNo = r.number;
   if(!ev.party && r.party) ev.party = r.party;
-  ev.note = ''; put('ekEvents', ev);
+  ev.note = ''; ev.dateMsg = '';
+  // Korrektur mit anderem Veranstaltungsdatum: übernehmen (Wunsch Thomas)
+  if(old.length && opt.off && opt.off.eventDate && opt.off.eventDate!==ev.date){ ev.dateMsg = ` Datum geändert: ${dDE(ev.date)} → ${dDE(opt.off.eventDate)}.`; ev.date = opt.off.eventDate; }
+  put('ekEvents', ev);
+  // Schon aus dem Lager entnommen: Entnahme an den neuen Bedarf anpassen
+  ev.retook = false;
+  if(old.length && ev.took){ ekTookMv(ev.id).forEach(m=>del('movements', m.id)); ev.took = null; put('ekEvents', ev); ekTake(ev.id, true); ev.retook = true; }
   return old.length ? 'updated' : 'added';
 }
 const ekOfferMsg = (res, ev, r, n) => res==='same' ? `Angebot${r.number?' '+r.number:''} ist schon eingelesen (${ev.name}). Nichts verdoppelt.`
-  : res==='updated' ? `Angebot${r.number?' '+r.number:''} hat sich geändert: Positionen in „${ev.name}“ aktualisiert.` : `${n} Positionen aus dem Angebot übernommen`;
+  : (res==='updated' ? `Angebot${r.number?' '+r.number:''}: Positionen in „${ev.name}“ ersetzt.` : `${n} Positionen aus dem Angebot übernommen.`)
+    + (ev.dateMsg||'') + (ev.retook ? ' Entnahme aus dem Lager angepasst.' : '');
 /* Angebot in eine (von Hand angelegte) Veranstaltung einlesen: Positionen kommen dazu, Name und Datum bleiben.
    Die Datei wird zur Ablage nach Dropbox Angebote/<Jahr>/ hochgeladen (nicht, wenn sie schon eingelesen war). */
 async function ekIntoEvent(file, id){
   const e = ES.ekEvents[id]; if(!e) return;
-  const {r} = await ekReadOffer(file);
+  const {r, off} = await ekReadOffer(file);
   if(!r.items.length){ toast('Im Angebot wurden keine Positionen erkannt. Bitte von Hand ergänzen.'); return; }
   const key = ekKeyOf(r), owner = ekOfferOwner(key, r);
   if(owner && owner.id!==id){ toast(`Angebot${r.number?' '+r.number:''} gehört schon zur Veranstaltung „${owner.name}“. Nicht doppelt eingelesen.`); return; }
-  const res = ekPutOffer(e, r, key);
+  // Hat die Veranstaltung schon ein anderes Angebot: das neue ersetzt alle Angebotspositionen (Positionen von Hand bleiben)
+  const hasOther = ekLinesOf(id).some(l=>ekLineKey(l) && ekLineKey(l)!==key);
+  const res = ekPutOffer(e, r, key, {replaceAll: hasOther, off});
   if(res!=='same' && DBX.connected){ try{ const m = await DBX.upload(P(`Angebote/${today().slice(0,4)}/${file.name}`), file, 'add');
       if(e.file && normText(e.file)!==normText(m.path_display||'')) e.seen = [...new Set([...(e.seen||[]), m.path_display])]; else e.file = m.path_display||''; put('ekEvents', e); }catch(err){ toast('Angebot eingelesen, Ablage in Dropbox fehlgeschlagen: '+err.message); } }
   persist();
@@ -2027,7 +2039,7 @@ async function ekIntoEvent(file, id){
 async function ekFromFile(file, dbxPath){
   const {r, off} = await ekReadOffer(file);
   const key = ekKeyOf(r), owner = r.items.length ? ekOfferOwner(key, r) : null;
-  if(owner){ const res = ekPutOffer(owner, r, key);
+  if(owner){ const res = ekPutOffer(owner, r, key, {off});
     // Datei merken, damit derselbe Ablageort beim nächsten Prüfen nicht noch einmal gelesen wird
     if(dbxPath && normText(dbxPath)!==normText(owner.file||'')){ owner.seen = [...new Set([...(owner.seen||[]), dbxPath])]; put('ekEvents', owner); }
     persist(); ekLastMsg = ekOfferMsg(res, owner, r, r.items.length); return owner; }
@@ -2221,10 +2233,12 @@ function pkCalc(id){
   for(const l of ekAllOf(id).filter(x=>x.list==='pkadd').sort((x,y)=>(x.pos||0)-(y.pos||0))){
     const a = S.articles[l.articleId];
     rows.push({key:l.id, art: a || {id:'', name:l.name||''}, qty:Number(l.qty)||0, from:new Set(), addId:l.id, line:l, calc:0}); }
-  const checks = {}; ekAllOf(id).filter(x=>x.list==='pkcheck').forEach(x=>checks[x.key]=!!x.on);
+  const checks = {}; ekAllOf(id).filter(x=>x.list==='pkcheck').forEach(x=>checks[x.key]=x);
   rows.forEach(r=>{ const a = r.art.id ? S.articles[r.art.id] : null;
     r.sec = a && kindOf(a)==='leistung' ? 'leistung' : 'ware'; r.cat = r.addId ? 'Zusätzlich' : (a.category||'ohne Gruppe');
-    r.unit = r.addId && r.line.unit ? r.line.unit : (a ? uL(a, r.qty) : ''); r.on = !!checks[r.key]; });
+    r.unit = r.addId && r.line.unit ? r.line.unit : (a ? uL(a, r.qty) : ''); const ck = checks[r.key];
+    // Haken gilt nur für die Menge, die beim Abhaken galt; ändert sich die Menge (z. B. korrigiertes Angebot), neu packen
+    r.on = !!(ck && ck.on && (ck.q==null || Math.abs(Number(ck.q)-r.qty)<1e-9)); r.recheck = !!(ck && ck.on && !r.on); });
   rows.sort((x,y)=>(x.sec==='leistung')-(y.sec==='leistung')||(x.cat==='Zusätzlich')-(y.cat==='Zusätzlich')||x.cat.localeCompare(y.cat,'de')||(x.addId?(x.line.pos||0)-(y.line.pos||0):x.art.name.localeCompare(y.art.name,'de')));
   const list = rows.filter(r=>r.qty>0 && (r.art.name||'').trim());
   return {rows, list, removed: rows.filter(r=>r.setId && !r.qty), done: list.filter(r=>r.on).length, open: ekOpenCount(id)};
@@ -2234,10 +2248,10 @@ function pkSet(id, artId, qty){
   if(!l) l = {id:uid(), eventId:id, list:'pkset', articleId:artId, desc:'', unit:'', how:'manuell', src:'packliste', pos:0};
   l.qty = qty; put('ekLines', l); persist();
 }
-function pkCheck(id, key, on){
+function pkCheck(id, key, on, qty){
   const cid = 'pk|'+id+'|'+key;   // feste ID: zwei Geräte haken dieselbe Zeile, kein Doppel
   const l = ES.ekLines[cid] || {id:cid, eventId:id, list:'pkcheck', key, desc:'', qty:0, unit:'', articleId:'', how:'', src:'packliste', pos:0};
-  l.on = on; l.deleted = false; put('ekLines', l); persist();
+  l.on = on; l.q = on ? qty : null; l.deleted = false; put('ekLines', l); persist();
 }
 function vPackliste(){
   const evs = live('ekEvents').sort((a,b)=>(a.date||'').localeCompare(b.date||'')||a.name.localeCompare(b.name));
@@ -2268,7 +2282,7 @@ function vPkEvent(){
         <input class="ek-bunit" data-pka="unit" data-id="${r.addId}" value="${esc(r.line.unit||'')}" placeholder="${esc(r.unit||'Einheit')}" aria-label="Einheit">
         <button class="btn sm danger" data-act="pkDelLine" data-id="${r.addId}" aria-label="Position entfernen">✕</button></div>`.replace(`value="${r.line.articleId}"`, r.line.articleId?`value="${r.line.articleId}" selected`:'value=""')
     : `<div class="pk-row ${r.on?'on':''}"><input type="checkbox" data-pkc="${r.key}" ${r.on?'checked':''} aria-label="gepackt">
-        <div class="ek-bname">${esc(r.art.name)}${r.setId?' <span class="pill warn">geändert</span>':''}${r.from.size?`<br><span class="small muted">für ${[...r.from].map(esc).join(', ')}</span>`:''}</div>
+        <div class="ek-bname">${esc(r.art.name)}${r.setId?' <span class="pill warn">geändert</span>':''}${r.recheck?' <span class="pill warn">Menge geändert, neu packen</span>':''}${r.from.size?`<br><span class="small muted">für ${[...r.from].map(esc).join(', ')}</span>`:''}</div>
         <input class="ek-bqty" data-pkq="${r.key}" inputmode="decimal" value="${fmt(r.qty,3)}" aria-label="Menge">
         <span class="ek-bunit small">${esc(r.unit)}</span>
         ${r.setId?`<button class="btn sm" data-act="pkReset" data-id="${r.setId}" aria-label="Zurück zur berechneten Menge">↺</button>`:`<button class="btn sm danger" data-act="pkRemove" data-art="${r.key}" aria-label="Von der Liste nehmen">✕</button>`}</div>`;
@@ -3155,7 +3169,10 @@ document.addEventListener('click', async e=>{
       const sels=document.querySelectorAll('.ek-line select'); sels[sels.length-1]?.focus(); break; }
     case 'ekDelLine': del('ekLines',id); persist(); render(); break;
     case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
-    case 'ekDel': ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht'); break;
+    case 'ekDel': { const ev=ES.ekEvents[id]; const fl=[ev.file, ...(ev.seen||[])].filter(Boolean);
+      ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view='einkauf'; render(); toast('Veranstaltung gelöscht');
+      if(DBX.connected) for(const f of fl){ const m=f.match(/^(.*\/Angebote\/\d{4})\/([^/]+)$/i); if(m) DBX.move(f, m[1]+'/Gelöscht/'+m[2]).catch(()=>{}); }
+      break; }
     case 'ekReadOffer': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const evId=ekId;
       inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …'); await ekIntoEvent(f, evId); render(); };
       inp.click(); break; }
@@ -3288,7 +3305,7 @@ document.addEventListener('change', e=>{
     if(t.dataset.ekl==='qty'){ const n=parseNum(t.value); l.qty = isNaN(n) ? 0 : n; }
     else { l.articleId=t.value; l.how = t.value==='skip' ? 'nicht berücksichtigt' : 'manuell'; ekLearn(l); }
     put('ekLines',l); persist(); const y=scrollY; render(); scrollTo(0,y); return; }
-  if(t.dataset.pkc){ pkCheck(pkId, t.dataset.pkc, t.checked); const y=scrollY; render(); scrollTo(0,y); return; }
+  if(t.dataset.pkc){ const r=pkCalc(pkId).rows.find(x=>x.key===t.dataset.pkc); pkCheck(pkId, t.dataset.pkc, t.checked, r ? r.qty : null); const y=scrollY; render(); scrollTo(0,y); return; }
   if(t.dataset.pkq){ const v=t.value.trim();
     if(v===''){ const l=ekAllOf(pkId).find(x=>x.list==='pkset' && x.articleId===t.dataset.pkq); if(l){ del('ekLines',l.id); persist(); } }
     else { const n=parseNum(v); if(isNaN(n)){ t.value=''; return; } pkSet(pkId, t.dataset.pkq, n); }
