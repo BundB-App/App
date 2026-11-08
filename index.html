@@ -119,6 +119,7 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
 .t-short{display:none}
+.stats.one{grid-template-columns:minmax(0,220px)}
 .pill.k-ware{background:var(--accent-soft);color:var(--good)} .pill.k-leistung{background:var(--info-soft);color:var(--info)}
 .item .pills{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
 /* Bestandszeile in festen Spalten: Name | Typ | Menge (rechtsbündig) | Einheit (linksbündig) */
@@ -1400,8 +1401,9 @@ function vBestand(){
   const q = normText(search);
   const shown = all.filter(a=>artMatch(a,q) && (!bKind || q || kindOf(a)===bKind));
   let html = `<div class="stack">
-    <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())} · ${all.length} Artikel</div><h1>Bestand</h1></div>
-      <button class="btn primary" data-act="addArt">+ Artikel</button></div>`;
+    <div class="row spread"><div><div class="eyebrow">Stand ${dDE(today())}</div><h1>Bestand</h1></div>
+      <button class="btn primary" data-act="addArt">+ Artikel</button></div>
+    <div class="stats one"><div class="stat"><span class="eyebrow">Artikel</span><b class="num">${all.length}</b></div></div>`;
   if(addingArt) html += `<form class="panel stack" id="artForm">
       <h3>Neuer Artikel</h3>
       <div class="grid">
