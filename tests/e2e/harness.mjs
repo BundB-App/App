@@ -46,7 +46,11 @@ export function seedRealData({ einkaufJson = false } = {}) {
 async function routes(ctx, html) {
   await ctx.route('**/*', async route => {
     const req = route.request(), url = req.url();
-    if (url.startsWith('http://app.test/')) return /sw\.js|manifest|icon/.test(url) ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ contentType: 'text/html', body: html });
+    if (url.startsWith('http://app.test/') || url.startsWith('http://old.test/')) {
+      const f = url.split('/').pop().split('?')[0];
+      if (/^(sw\.js|manifest\.webmanifest|icon-\d+\.png)$/.test(f)) return route.fulfill({ body: readFileSync(join(ROOT, f)) });
+      return route.fulfill({ contentType: 'text/html', body: html });
+    }
     for (const f of Object.keys(LIBS)) if (url.includes(f)) return route.fulfill({ contentType: 'application/javascript', body: readFileSync(join(CACHE, f)) });
     if (url.includes('api.dropboxapi.com/oauth2/token')) return route.fulfill({ json: { access_token: 'tok', expires_in: 14400 } });
     if (url.includes('api.dropboxapi.com/2/')) {
@@ -60,6 +64,7 @@ async function routes(ctx, html) {
         return route.fulfill({ json: { entries, has_more: false } });
       }
       if (ep === 'files/get_metadata') { const f = files.get(b.path.toLowerCase()); return f ? route.fulfill({ json: { rev: f.rev } }) : route.fulfill({ status: 409, json: { error_summary: 'path/not_found/' } }); }
+      if (ep === 'files/delete_v2') { const k = b.path.toLowerCase(); if (!files.has(k)) return route.fulfill({ status: 409, json: { error_summary: 'path_lookup/not_found/' } }); files.delete(k); return route.fulfill({ json: { metadata: {} } }); }
       if (ep === 'files/move_v2') { const f = files.get(b.from_path.toLowerCase()); if (!f) return route.fulfill({ status: 409, json: { error_summary: 'from_lookup/not_found/' } }); files.delete(b.from_path.toLowerCase()); putF(b.to_path, f.body); return route.fulfill({ json: { metadata: { path_display: b.to_path } } }); }
       return route.fulfill({ json: {} });
     }

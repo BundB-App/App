@@ -1656,6 +1656,7 @@ function vSetup(){
   return `<div class="stack">
     <div><div class="eyebrow">B&amp;B</div><h1>Einstellungen</h1></div>
     <h2 class="set-h">Allgemein</h2>
+    ${bkPanel()}
     <div class="panel stack"><h2>Darstellung auf diesem Gerät</h2>
       <div class="seg big3" role="group" aria-label="Darstellung">${[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(([k,l])=>
         `<button data-act="theme" data-t="${k}" aria-pressed="${(CFG.theme||'auto')===k}">${l}</button>`).join('')}</div>
@@ -2227,6 +2228,129 @@ async function ekPdf(id){
   if(DBX.connected){ try{ await DBX.upload(P('Einkauf/'+fname), blob, 'overwrite'); where = `Abgelegt in Dropbox: Einkauf/${fname}`; }catch(err){ where = 'Dropbox-Ablage fehlgeschlagen: '+err.message; } }
   ekPdfOut = {id, file, url: URL.createObjectURL(blob), where, share: !!(navigator.canShare && navigator.canShare({files:[file]}))};
   return ekPdfOut;
+}
+
+/* ===================== Backup ===================== */
+/* Sicherung der drei Datenbanken (lager.json, personal.json, einkauf.json) in eine Datei, abgelegt in der eigenen Dropbox
+   jedes Nutzers unter /BundB App Backup (außerhalb des geteilten Ordners). Läuft beim Öffnen der App, wenn fällig
+   (täglich/wöchentlich/monatlich, je Gerät einstellbar); fällig wird nach dem jüngsten Backup im Ordner entschieden,
+   damit Mac und iPhone desselben Kontos nicht doppelt sichern. Ältere als die eingestellte Anzahl werden gelöscht.
+   Wiederherstellen: gewählte Bereiche werden zum neuen Stand für alle Geräte (alle Datensätze neu gestempelt, nicht
+   enthaltene als gelöscht markiert); vorher automatische Sicherung „vor-Wiederherstellung“ (wird nicht automatisch gelöscht). */
+const BK_DIR = '/BundB App Backup';
+const BK_INT = {day:['täglich',1], week:['wöchentlich',7], month:['monatlich',30]};
+let bkList = null, bkBusy = '', bkProg = null;
+const bkInterval = () => BK_INT[CFG.bkInterval] ? CFG.bkInterval : 'week';
+const bkKeep = () => Math.max(1, Math.min(200, parseInt(CFG.bkKeep,10) || 13));
+const bkStamp = d => { const x=d||new Date(), z=n=>String(n).padStart(2,'0'); return `${x.getFullYear()}-${z(x.getMonth()+1)}-${z(x.getDate())}_${z(x.getHours())}${z(x.getMinutes())}${z(x.getSeconds())}`; };
+const bkIsRegular = n => /^Backup_\d{4}-\d{2}-\d{2}_\d{4}(\d{2})?( \(\d+\))?\.json$/i.test(n);
+const bkDateOf = n => { const m = n.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})?/); return m ? new Date(+m[1], m[2]-1, +m[3], +m[4], +m[5], +(m[6]||0)) : null; };
+async function bkLoadList(){
+  const all = await DBX.list(BK_DIR).catch(()=>[]);
+  bkList = all.filter(e=>e['.tag']==='file' && /\.(json|zip)$/i.test(e.name)).sort((a,b)=>((bkDateOf(b.name)||0)-(bkDateOf(a.name)||0)) || b.name.localeCompare(a.name));
+  return bkList;
+}
+function bkPayload(){
+  return JSON.stringify({app:'B&B Lager', kind:'backup', createdAt:new Date().toISOString(), device:DEVICE, base:CFG.base, lager:S, personal:PS, einkauf:ES});
+}
+async function bkCreate(suffix){
+  const name = `Backup_${bkStamp()}${suffix?'_'+suffix:''}.json`;
+  await DBX.folder(BK_DIR);
+  await DBX.upload(`${BK_DIR}/${name}`, new Blob([bkPayload()], {type:'application/json'}), 'add');
+  CFG.bkLast = now(); saveCfg();
+  return name;
+}
+async function bkPrune(){
+  const reg = (await bkLoadList()).filter(e=>bkIsRegular(e.name));
+  for(const e of reg.slice(bkKeep())){ try{ await DBX.api('files/delete_v2', {path:e.path_lower}); }catch(err){} }
+  await bkLoadList();
+}
+/* Beim Öffnen: fällig? Dann still sichern und aufräumen. */
+async function bkAuto(){
+  if(!DBX.connected || bkBusy || syncState.s==='err') return;
+  try{
+    const list = await bkLoadList(), last = list.filter(e=>bkIsRegular(e.name)).map(e=>bkDateOf(e.name)).filter(Boolean)[0];
+    const days = BK_INT[bkInterval()][1];
+    if(last && (Date.now()-last.getTime()) < days*864e5 - 36e5) return;
+    bkBusy = 'auto'; await bkCreate(); await bkPrune();
+  }catch(e){ console.warn('Backup', e); }
+  bkBusy = ''; if(view==='setup' && !isTyping()) render();
+}
+/* Wiederherstellen: Bereiche aus dem Backup werden der neue Stand für alle Geräte */
+function bkRestoreState(cur, bak, colls, empty){
+  const out = empty(), t = now();
+  for(const c of colls){ const C = cur[c]||{}, B = (bak&&bak[c])||{};
+    for(const id of new Set([...Object.keys(C), ...Object.keys(B)])){
+      if(B[id]) out[c][id] = {...B[id], updatedAt:t, by:DEVICE};
+      else if(C[id] && !C[id].deleted) out[c][id] = {...C[id], deleted:true, updatedAt:t, by:DEVICE};
+      else out[c][id] = C[id];
+    } }
+  out.meta = {...(cur.meta||{})};
+  return out;
+}
+async function bkRestore(data, parts){
+  if(!data || data.kind!=='backup' || !data.lager) throw new Error('Das ist keine Backup-Datei der B&B-App.');
+  bkBusy = 'Sicherung vor dem Wiederherstellen …'; render();
+  await bkCreate('vor-Wiederherstellung');
+  if(parts.lager)    S  = bkRestoreState(S,  data.lager,    COLLS,  emptyState);
+  if(parts.personal) PS = bkRestoreState(PS, data.personal, PCOLLS, emptyPState);
+  if(parts.einkauf)  ES = bkRestoreState(ES, data.einkauf,  ECOLLS, emptyEState);
+  persist(); bkBusy = ''; await sync(); await bkLoadList();
+}
+/* Programmdateien als ZIP (ohne Kompression, kein Fremdcode): in den Backup-Ordner und zum Herunterladen */
+const CRC_T = (()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
+const crc32 = b => { let c=0xFFFFFFFF; for(let i=0;i<b.length;i++) c = CRC_T[(c^b[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+function zipStore(entries){
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), dt = ((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1)), dd = (((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate());
+  for(const {name, data} of entries){
+    const nm = enc.encode(name), crc = crc32(data), h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(8,0,true); h.setUint16(10,dt,true); h.setUint16(12,dd,true);
+    h.setUint32(14,crc,true); h.setUint32(18,data.length,true); h.setUint32(22,data.length,true); h.setUint16(26,nm.length,true); h.setUint16(28,0,true);
+    parts.push(new Uint8Array(h.buffer), nm, data);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true); c.setUint16(10,0,true); c.setUint16(12,dt,true); c.setUint16(14,dd,true);
+    c.setUint32(16,crc,true); c.setUint32(20,data.length,true); c.setUint32(24,data.length,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+    central.push(new Uint8Array(c.buffer), nm); off += 30 + nm.length + data.length;
+  }
+  const csize = central.reduce((s,x)=>s+x.length,0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true); e.setUint16(8,entries.length,true); e.setUint16(10,entries.length,true); e.setUint32(12,csize,true); e.setUint32(16,off,true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], {type:'application/zip'});
+}
+async function bkProgram(){
+  const names = ['index.html','sw.js','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'], entries = [];
+  for(const n of names){ const r = await fetch(n, {cache:'no-cache'}); if(!r.ok) throw new Error(`${n} nicht ladbar (${r.status})`); entries.push({name:n, data:new Uint8Array(await r.arrayBuffer())}); }
+  const ver = ((new TextDecoder().decode(entries[1].data)).match(/bb-lager-app-(v\d+)/)||[])[1] || '';
+  const zip = zipStore(entries), name = `Programm_${ver?ver+'_':''}${bkStamp()}.zip`;
+  let where = 'Programm als ZIP erstellt.';
+  if(DBX.connected){ await DBX.folder(BK_DIR); await DBX.upload(`${BK_DIR}/${name}`, zip, 'add'); where = `Abgelegt in Dropbox: ${BK_DIR.slice(1)}/${name}`; await bkLoadList(); }
+  bkProg = {name, url:URL.createObjectURL(zip), where};
+}
+function bkPanel(){
+  if(!DBX.connected) return `<div class="panel stack"><h2>Backup</h2><p class="small muted" style="margin:0">Backups brauchen die Dropbox-Verbindung (unten unter „Ganze App“).</p></div>`;
+  if(bkList===null){ bkLoadList().then(()=>{ if(view==='setup' && !isTyping()) render(); }); }
+  const reg = (bkList||[]).filter(e=>/\.json$/i.test(e.name));
+  const last = reg.filter(e=>bkIsRegular(e.name))[0];
+  const kb = n => n>1e6 ? (n/1e6).toFixed(1).replace('.',',')+' MB' : Math.round(n/1e3)+' KB';
+  return `<div class="panel stack"><div class="row spread"><h2>Backup</h2>${bkBusy?'<span class="pill">läuft …</span>':last?`<span class="pill ok">zuletzt ${dDE(last.name.slice(7,17))}</span>`:'<span class="pill warn">noch keins</span>'}</div>
+    <p class="small muted" style="margin:0">Sichert Lager, Personal und Einkauf (Veranstaltungen, Listen) in deine eigene Dropbox, Ordner <code>${BK_DIR.slice(1)}</code>. Der liegt außerhalb des geteilten Ordners, versehentliches Löschen dort trifft ihn nicht. Die App sichert beim Öffnen, sobald ein Backup fällig ist, und löscht dann die ältesten über der eingestellten Anzahl.</p>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="f">Wie oft<select id="bk-int">${Object.entries(BK_INT).map(([k,[l]])=>`<option value="${k}" ${bkInterval()===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="f">Backups behalten<input id="bk-keep" inputmode="numeric" value="${bkKeep()}"></label></div>
+    <div class="small muted">Das reicht etwa ${(()=>{ const d=bkKeep()*BK_INT[bkInterval()][1]; return d>=60 ? Math.round(d/30)+' Monate' : d>=14 ? Math.round(d/7)+' Wochen' : d+' Tage'; })()} zurück. Gilt für dieses Gerät.</div>
+    <div class="row"><button class="btn" data-act="bkNow" ${bkBusy?'disabled':''}>Jetzt sichern</button><button class="btn" data-act="bkProgram" ${bkBusy?'disabled':''}>Programm sichern (ZIP)</button></div>
+    ${bkProg?`<div class="row" style="gap:8px"><span class="small muted">${esc(bkProg.where)}</span><button class="btn sm" data-act="bkProgDl">Herunterladen</button></div>`:''}
+    <details class="stack"><summary><b>Backup einspielen (wiederherstellen)</b></summary>
+      <div class="stack" style="margin-top:10px">
+        <p class="small" style="margin:0">Holt den Stand aus einem Backup zurück, <b>für alle Geräte</b>. Vorher legt die App automatisch eine Sicherung des jetzigen Stands an („vor-Wiederherstellung“). Zum Bestätigen musst du unten <b>WIEDERHERSTELLEN</b> eintippen.</p>
+        <div class="row" style="gap:14px">${[['lager','Lager'],['personal','Personal'],['einkauf','Einkauf (Veranstaltungen, Listen)']].map(([k,l])=>`<label class="row small" style="gap:6px"><input type="checkbox" class="bk-part" value="${k}" checked> ${l}</label>`).join('')}</div>
+        <label class="f">Backup<select id="bk-file">${reg.map(e=>{ const d=bkDateOf(e.name), lbl=d?d.toLocaleString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):e.name;
+          return `<option value="${esc(e.path_lower)}" ${last && e.name===last.name?'selected':''}>${esc(lbl)}${bkIsRegular(e.name)?'':' · Sicherung vor Wiederherstellung'} · ${kb(e.size||0)}</option>`; }).join('') || '<option value="">Noch keine Backups im Ordner</option>'}<option value="__pick">Andere Datei auswählen …</option></select></label>
+        <div class="row"><input id="bk-word" placeholder="WIEDERHERSTELLEN eintippen" autocomplete="off" style="flex:1 1 220px">
+          <button class="btn danger" data-act="bkRestore" ${bkBusy?'disabled':''}>Backup einspielen</button></div>
+        ${bkBusy && bkBusy!=='auto' ? `<div class="small muted">${esc(bkBusy)}</div>` : ''}
+      </div></details>
+  </div>`;
 }
 
 /* ===================== Reservierungen ===================== */
@@ -3341,6 +3465,18 @@ document.addEventListener('click', async e=>{
       a.groups = {...(a.groups||{}), [g.id]:q}; put('articles', a); persist(); render(); toast(`${a.name} gehört jetzt zu „${g.name}“`); break; }
     case 'pgDel': { const a=S.articles[id]; const gs={...(a.groups||{})}; delete gs[el.dataset.g]; a.groups=gs; put('articles', a); persist(); render(); break; }
     case 'bKind': bKind=el.dataset.k||''; render(); break;
+    case 'bkNow': { bkBusy='Backup wird erstellt …'; render(); try{ const n = await bkCreate(); await bkPrune(); toast('Backup erstellt: '+n); }catch(err){ toast('Backup fehlgeschlagen: '+err.message); } bkBusy=''; render(); break; }
+    case 'bkProgram': { bkBusy='Programm wird gesichert …'; render(); try{ await bkProgram(); toast('Programm gesichert'); }catch(err){ toast('Programm sichern fehlgeschlagen: '+err.message); } bkBusy=''; render(); break; }
+    case 'bkProgDl': if(bkProg){ const a=document.createElement('a'); a.href=bkProg.url; a.download=bkProg.name; document.body.appendChild(a); a.click(); a.remove(); } break;
+    case 'bkRestore': {
+      if(($('#bk-word').value||'').trim().toUpperCase()!=='WIEDERHERSTELLEN'){ toast('Zum Bestätigen bitte WIEDERHERSTELLEN eintippen.'); return; }
+      const parts = {}; document.querySelectorAll('.bk-part').forEach(c=>{ if(c.checked) parts[c.value]=true; });
+      if(!Object.keys(parts).length){ toast('Bitte mindestens einen Bereich wählen.'); return; }
+      const src = $('#bk-file').value;
+      const run = async text => { try{ await bkRestore(JSON.parse(text), parts); toast('Backup eingespielt. Alle Geräte übernehmen den Stand beim nächsten Sync.'); }catch(err){ bkBusy=''; toast('Wiederherstellen fehlgeschlagen: '+err.message); } render(); };
+      if(src==='__pick'){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=async ()=>{ const f=inp.files[0]; if(f) run(await f.text()); }; inp.click(); }
+      else if(src){ bkBusy='Backup wird geladen …'; render(); const b = await DBX.download(src); if(!b){ bkBusy=''; toast('Backup nicht gefunden.'); render(); return; } run(await b.text()); }
+      break; }
     case 'rvOpen': rvId=id; view='rvEvent'; render(); window.scrollTo(0,0); break;
     case 'rvTake': { const c=rvTake(rvId); const y=scrollY; render(); scrollTo(0,y);
       toast(c && c.conflicts.length ? `Entnommen, aber ACHTUNG: bei ${c.conflicts.length} Leistung${c.conflicts.length>1?'en':''} reicht das Lager nicht.` : 'Leistungen aus dem Lager entnommen. Diese Veranstaltung hat Vorrang.'); break; }
@@ -3470,6 +3606,8 @@ document.addEventListener('change', e=>{
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='hideSvc'){ hideSvc=t.checked; render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
+  if(t.id==='bk-int'){ CFG.bkInterval=t.value; saveCfg(); render(); return; }
+  if(t.id==='bk-keep'){ const n=parseInt(t.value,10); CFG.bkKeep = n>0 ? Math.min(200,n) : 13; saveCfg(); render(); return; }
   if(t.id==='cfg-own'){ CFG.ownName=t.value.trim(); saveCfg(); return; }
   if(t.id==='cfg-auto'){ CFG.autoBook=t.checked; saveCfg(); return; }
   if(t.id==='pe-from' || t.id==='pe-to'){ peRebuild(t.id); return; }
@@ -3576,7 +3714,7 @@ function bindDrop(){
   d.addEventListener('dragleave', ()=>d.classList.remove('over'));
   d.addEventListener('drop', e=>{ e.preventDefault(); d.classList.remove('over'); const f=e.dataTransfer.files[0]; if(f) importFile(f, dir, null); });
 }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && DBX.connected){ sync(); scanInbox(false); scanOffers(); } });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && DBX.connected){ sync().then(()=>bkAuto()); scanInbox(false); scanOffers(); } });
 
 render();
 /* Offline: App-Dateien und Bibliotheken lokal speichern (nur über https) */
@@ -3588,7 +3726,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 }
 window.addEventListener('online', ()=>{ if(DBX.connected){ sync(); scanInbox(false); } });
 window.addEventListener('offline', ()=>setSync(DBX.connected?'err':'off', 'Keine Internetverbindung. Buchungen werden gespeichert und später synchronisiert.'));
-if(DBX.connected){ setSync('busy'); sync().then(()=>{ scanInbox(true); scanOffers(); }); } else setSync('off');
+if(DBX.connected){ setSync('busy'); sync().then(()=>{ scanInbox(true); scanOffers(); bkAuto(); }); } else setSync('off');
 </script>
 </body>
 </html>
