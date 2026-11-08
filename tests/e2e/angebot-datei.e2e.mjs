@@ -54,5 +54,10 @@ const B = await device({ viewport: { width: 390, height: 844 }, scheme: 'dark' }
 await pb.click('[data-go="lager"]'); await pb.click('#tabs [data-go="einkauf"]'); await noHScroll(pb);
 assert.ok(await pb.isVisible('[data-act=ekImportNew]')); await pb.screenshot({ path: join(OUT, 'angebot-datei_iphone.png') });
 await pb.click('#tabs [data-go="reserv"]'); await noHScroll(pb); ok('iPhone: Knopf „Angebot einlesen“ in Einkauf und Reservierungen, kein seitliches Scrollen');
+// Löschen einer Veranstaltung fasst das Angebot nicht an (auch alte Veranstaltung mit Pfad im Dropbox-Ordner)
+putF('/Apps/BundB App/Angebote/2026/Alt.pdf', 'x'); const before = [...files.keys()].sort().join('|');
+await pa.evaluate(() => { const e = put('ekEvents', { id: uid(), name: 'Alt', date: '2026-12-24', party: '', offerNo: 'A-1', file: '/Apps/BundB App/Angebote/2026/Alt.pdf', note: '' }); persist(); rvId = e.id; view = 'rvEvent'; render(); });
+await pa.click('[data-act=ekDel]'); await pa.click('[data-act=ekDel]'); await pa.waitForTimeout(500); await syncNow(pa);
+assert.deepEqual([...files.keys()].filter(k => k.includes('/angebote/')).sort(), before.split('|').filter(k => k.includes('/angebote/'))); ok('Veranstaltung gelöscht: Angebotsdatei bleibt unverändert liegen');
 assert.equal(files.get(BASE + 'personal.json').body.toString(), personalBefore); ok('personal.json unverändert');
 await done();

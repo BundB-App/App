@@ -3512,9 +3512,9 @@ document.addEventListener('click', async e=>{
       const sels=document.querySelectorAll('.ek-line select'); sels[sels.length-1]?.focus(); break; }
     case 'ekDelLine': del('ekLines',id); persist(); render(); break;
     case 'ekOk': { const l=ES.ekLines[id]; l.how='bestätigt'; put('ekLines',l); ekLearn(l); persist(); render(); break; }
-    case 'ekDel': { const ev=ES.ekEvents[id]; const fl=[ev.file, ...(ev.seen||[])].filter(Boolean);
+    case 'ekDel': { const ev=ES.ekEvents[id];
       if(ev.rv) rvUntake(id, true); ekTookMv(id).forEach(m=>del('movements',m.id)); del('ekEvents',id); ekAllOf(id).forEach(l=>del('ekLines',l.id)); persist(); view = view==='rvEvent' ? 'reserv' : 'einkauf'; render(); toast('Veranstaltung gelöscht');
-      if(DBX.connected) for(const f of fl){ const m=f.match(/^(.*\/Angebote\/\d{4})\/([^/]+)$/i); if(m) DBX.move(f, m[1]+'/Gelöscht/'+m[2]).catch(()=>{}); }
+      // Angebotsdateien werden nie verschoben oder gelöscht, nur gelesen (Wunsch Thomas, v65)
       break; }
     case 'ekImportNew': { const inp=document.createElement('input'); inp.type='file'; inp.accept='.pdf,.csv,.xml,application/pdf,text/csv'; const from=view;
       inp.onchange=async ()=>{ const f=inp.files[0]; if(!f) return; toast('Angebot wird gelesen …');
