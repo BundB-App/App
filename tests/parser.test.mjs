@@ -109,6 +109,9 @@ test('Angebot aus dem Rechnungsprogramm (Einkauf): Mehrzahl-Einheiten, Fußzeile
   assert.deepEqual(Q.parseItemLine('1 Coca Cola 12 x 1l 5 Kästen 15,96 19,00 % 79,80'), {art:'', desc:'Coca Cola 12 x 1l', qty:5, unit:'Kästen', price:15.96, total:79.8, calc:false});
   assert.equal(Q.parseItemLine('18 Gastro Equipment 1 Pauschale 23,80 19,00 % 23,80').unit, 'Pauschale');
   assert.equal(Q.parseItemLine('Tel.: +49 173 6934338 IBAN: DE65 8509 5004 7678 6510 06'), null);
-  assert.deepEqual(Q.parseOffer(['Liefer-/Leistungsdatum: 14.11.2026', '"Karneval Auftakt" 14.11.2026']), {title:'Karneval Auftakt', eventDate:'2026-11-14'});
+  assert.deepEqual(Q.parseOffer(['Liefer-/Leistungsdatum: 14.11.2026', '"Karneval Auftakt" 14.11.2026']), {title:'Karneval Auftakt', eventDate:'2026-11-14', from:'', to:''});
+  assert.deepEqual(Q.parseOffer(['Mietzeitraum: 13.11. - 15.11.2026']).from, '2026-11-13');
+  assert.deepEqual(Q.parseOffer(['Mietzeitraum: 13.11. - 15.11.2026']).to, '2026-11-15');
+  assert.deepEqual(Q.parseOffer(['Mietzeitraum: 30.12. – 02.01.2027']).from, '2026-12-30');
   assert.equal(Q.parseHeader(['Firma GbR, Str. 1, 01454 Ort Angebots-Nr.: A-187', 'Kunde e.V. Kundennummer: 27'], 'Firma').number, 'A-187');
 });
