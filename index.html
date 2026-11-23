@@ -124,6 +124,9 @@ details.grp[open]>summary::before{transform:rotate(45deg)}
 .ek-line.need{box-shadow:inset 3px 0 0 var(--warn);padding-left:10px}
 .ek-buy{display:grid}
 .t-short{display:none}
+/* iPhone/iPad: Safari zoomt beim Antippen in jedes Eingabefeld unter 16 px hinein. Auf Touch-Geräten daher alle Felder 16 px,
+   damit die Ansicht beim Tippen so bleibt, wie sie ist (Wunsch Thomas). Am Mac unverändert. */
+@media (hover:none) and (pointer:coarse){ input, select, textarea{font-size:16px !important} }
 .save-bar .btn{white-space:nowrap}
 .stats.one{grid-template-columns:minmax(0,220px)}
 .pill.k-ware{background:var(--accent-soft);color:var(--good)} .pill.k-leistung{background:var(--info-soft);color:var(--info)}

@@ -118,6 +118,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - Darstellung pro Gerät unter Einstellungen (Automatisch/Hell/Dunkel): `CFG.theme`, wird schon im `<head>` als `data-theme` gesetzt (kein Aufblitzen).
 - Schriften: Barlow Condensed (Zahlen/Überschriften), IBM Plex Sans/Mono.
 - Mobil: untere Tab-Leiste, Safe-Area-Insets beachten, Mindestbreite 390 px testen.
+- **Eingabefelder auf Touch-Geräten mindestens 16 px** (`@media (hover:none) and (pointer:coarse)`), sonst zoomt Safari beim Antippen hinein. Test `tests/e2e/kein-zoom.e2e.mjs` (Gerät mit `touch:true`).
 
 ## Offene Ideen / nächste Etappen
 
