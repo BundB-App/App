@@ -25,6 +25,7 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
 <style>
 /* Layout: Lagerliste wie ein Regaletikett – kräftige Kondensschrift für Bestände, ruhige Flächen, Akzent Flaschengrün */
 :root{
+  --cat-bg:62% 91%; --cat-bd:45% 72%;
   --bg:#edf0f1; --surface:#ffffff; --sunk:#e4e9eb; --ink:#152029; --muted:#5a6873; --line:#d3dadf;
   --accent:#17684f; --accent-ink:#ffffff; --accent-soft:#dcece5;
   --warn:#9a5a12; --warn-soft:#f6e8d3; --bad:#b0281f; --bad-soft:#f7dedb; --good:#17684f; --info:#1d5fbf; --info-soft:#dde8f8;
@@ -35,10 +36,12 @@ try { const t = JSON.parse(localStorage.getItem('bb-lager-cfg-v1') || '{}').them
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --cat-bg:28% 20%; --cat-bd:35% 38%;
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
   --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; --info-soft:#1b2a44; color-scheme:dark}}
 :root[data-theme="dark"]{
+  --cat-bg:28% 20%; --cat-bd:35% 38%;
   --bg:#0f1519; --surface:#172027; --sunk:#121a20; --ink:#e4eaee; --muted:#93a2ad; --line:#2a3741;
   --accent:#4cc39a; --accent-ink:#04261a; --accent-soft:#18352b;
   --warn:#e3a457; --warn-soft:#3a2b17; --bad:#f07a70; --bad-soft:#3b1d1b; --good:#4cc39a; --info:#78acff; --info-soft:#1b2a44; color-scheme:dark}
@@ -367,6 +370,11 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .sort-row{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px 6px 12px}
 .sort-row span{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sort-row .btn{min-width:40px;justify-content:center}
+button.stat.need.cat{background:hsl(var(--cat-h) var(--cat-bg));border-color:hsl(var(--cat-h) var(--cat-bd))}
+button.stat.need.cat[aria-expanded="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.list.cat{border-left:5px solid hsl(var(--cat-h) var(--cat-bd))}
+.list.cat .asg-head{background:hsl(var(--cat-h) var(--cat-bg))}
+.sort-row.cat{background:hsl(var(--cat-h) var(--cat-bg));border-color:hsl(var(--cat-h) var(--cat-bd))}
 </style>
 </head>
 <body>
@@ -2671,6 +2679,12 @@ const ROLE_SHORT = {gastro:'Gastro', technik:'Technik', aufbau:'Aufbau', abbau:'
    Ältere Events ohne roles haben die vier Vorschläge. */
 const rolesOf = ev => ev && ev.roles ? ev.roles : Object.entries(ROLES).map(([id,name])=>({id,name}));
 /* Kategorien eines Tages: day.cats (ids) wählt aus den Kategorien des Events aus; fehlt es, gelten alle */
+/* Farbe je Kategorie (Kachel und Einplanen): gespeichert in role.c, neue bekommen die erste freie */
+const CAT_HUES = [35, 265, 175, 205, 325, 55, 235, 290, 190, 20];
+function roleColors(ev){ const rs=rolesOf(ev), m={}, used=new Set(rs.map(r=>r.c).filter(c=>c!=null));
+  rs.forEach(r=>{ if(r.c!=null) m[r.id]=r.c; else { let i=0; while(used.has(i) && i<CAT_HUES.length) i++; if(i>=CAT_HUES.length) i=rs.indexOf(r)%CAT_HUES.length; used.add(i); m[r.id]=i; } });
+  return m; }
+const catStyle = (ev, r, m=roleColors(ev)) => `--cat-h:${CAT_HUES[m[r]??0]}`;
 const rolesOfDay = (ev, day) => rolesOf(ev).filter(r=>!day || !day.cats || day.cats.includes(r.id));
 const roleName = (ev, r) => (rolesOf(ev).find(x=>x.id===r)||{}).name || ROLES[r] || r;
 const STATUS = {angefragt:'angefragt', bestaetigt:'bestätigt', abgesagt:'abgesagt'};
@@ -2840,7 +2854,7 @@ function savePEvent(id){
   peReadCats();
   const name = $('#pe-name').value.trim(), days = peCollect();
   if(!name || !days.length){ toast('Bitte Name und Datum angeben.'); return; }
-  const roles = peRoles.map(r=>({id:r.id, name:r.name.trim()}));
+  const cm = roleColors({roles:peRoles}), roles = peRoles.map(r=>({id:r.id, name:r.name.trim(), c:cm[r.id]}));
   if(!roles.length){ toast('Bitte mindestens eine Kategorie wählen.'); return; }
   if(roles.some(r=>!r.name)){ toast('Bitte jeder Kategorie einen Namen geben.'); return; }
   const ev = id ? PS.events[id] : {id:uid()};
@@ -2967,11 +2981,11 @@ function vPEvent(){
       <div class="row spread" style="flex-wrap:nowrap"><div style="min-width:0"><div class="eyebrow">Tag ${di+1} von ${days.length}${day.label?' · '+esc(day.label):''}</div><h2>${dWD(day.date)}</h2></div>
         <button class="btn tl-btn" data-act="pTimeline" aria-label="Zeitstrahl öffnen">${TL_ICON}<span>Zeitstrahl</span></button></div>` : ''}
     ${roles.length ? `<section class="ovw" aria-label="Übersicht"><div class="row spread"><span class="eyebrow">Übersicht</span><span class="row" style="gap:6px">${multi||pSortTiles?'':`<button class="btn sm tl-btn" data-act="pTimeline">${TL_ICON}<span>Zeitstrahl</span></button>`}${roles.length>1?`<button class="btn sm${pSortTiles?' primary':''}" data-act="pSortTiles">${pSortTiles?'Fertig':'Sortieren'}</button>`:''}</span></div>
-      ${pSortTiles ? `<div class="sort-list">${roles.map((r,i)=>`<div class="sort-row"><span>${esc(roleName(ev,r))}</span>
+      ${pSortTiles ? `<div class="sort-list">${roles.map((r,i)=>`<div class="sort-row cat" style="${catStyle(ev,r)}"><span>${esc(roleName(ev,r))}</span>
           <button class="btn sm" data-act="pMoveRole" data-r="${r}" data-dir="-1" aria-label="${esc(roleName(ev,r))} nach oben" ${i?'':'disabled'}>↑</button><button class="btn sm" data-act="pMoveRole" data-r="${r}" data-dir="1" aria-label="${esc(roleName(ev,r))} nach unten" ${i<roles.length-1?'':'disabled'}>↓</button></div>`).join('')}
         <div class="small muted">Reihenfolge gilt für Kacheln und Einplanen, an allen Tagen dieses Events.</div></div>` : `<div class="need-grid">${roles.map(r=>{ const n=Number(need[r])||0, c=as.filter(a=>a.role===r&&a.status==='bestaetigt').length, q=as.filter(a=>a.role===r&&a.status==='angefragt').length;
         const cls = roleCoverage(ev, day, r).state;   // rot zu wenige, blau überbelegt (auch kurz), grün genau
-        return `<button class="stat need ${cls}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span>
+        return `<button class="stat need cat ${cls}" style="${catStyle(ev,r)}" data-act="pTile" data-r="${r}" aria-expanded="${tile===r}"><span class="eyebrow">${esc(roleName(ev,r))}</span><b class="num">${c}/${n||'–'}</b><span class="small muted">${q?q+' angefragt':'&nbsp;'}</span>
           ${c ? `<span class="tile-names">${as.filter(a=>a.role===r&&a.status==='bestaetigt').map(a=>personName(a.personId)).sort((x,y)=>x.localeCompare(y)).map(n=>`<span>${esc(n)}</span>`).join('')}</span>` : ''}
           <span class="tile-more" aria-hidden="true">${tile===r?'▴':'▾'}</span></button>`; }).join('')}</div>`}
       ${tile && !pSortTiles ? `<div class="panel stack tile-list"><div class="row spread"><h3>${esc(roleName(ev,tile))} · bestätigt</h3><span class="small muted">${rtxt(tile)}</span></div>
@@ -2991,7 +3005,7 @@ function vPEvent(){
     ${s.missingIst ? `<div class="note">Bei ${s.missingIst} bestätigten Einsätzen fehlen noch die Ist-Zeiten. Eintragen: Kachel der Kategorie oben antippen.</div>` : ''}
     <div class="row spread plan-h"><h2>Einplanen</h2><button class="btn sm primary" data-act="pqOpen" data-id="${ev.id}">+ Person</button></div>
     ${roles.map(r=>{ const list=as.filter(a=>a.role===r).sort((a,b)=>order[a.status]-order[b.status]||personName(a.personId).localeCompare(personName(b.personId)));
-      return `<div class="list"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))} <span class="asg-date">· ${dShort(day.date)}</span></h3>${rtxt(r)?`<span class="small muted">${rtxt(r,true)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
+      return `<div class="list cat" style="${catStyle(ev,r)}"><div class="row spread asg-head"><span><h3>${esc(roleName(ev,r))} <span class="asg-date">· ${dShort(day.date)}</span></h3>${rtxt(r)?`<span class="small muted">${rtxt(r,true)}</span>`:''}</span><button class="btn sm" data-act="pqOpen" data-id="${ev.id}" data-role="${r}">+ einplanen</button></div>
         ${list.length ? list.map(a=>asgHtml(a,ev,day)).join('') : '<div class="asg small muted">Noch niemand eingeplant.</div>'}</div>`; }).join('')}
   </div>`;
 }
@@ -3416,7 +3430,7 @@ document.addEventListener('click', async e=>{
     case 'tlClose': tlClose(); break;
     case 'tlBack': if(e.target===el) tlClose(); break;
     case 'pSortTiles': pSortTiles=!pSortTiles; render(); break;
-    case 'pMoveRole': { const ev=PS.events[pEventId], day=dayOf(ev,{dayId:pDayId}), list=rolesOf(ev).map(x=>({...x}));
+    case 'pMoveRole': { const ev=PS.events[pEventId], day=dayOf(ev,{dayId:pDayId}), cm=roleColors(ev), list=rolesOf(ev).map(x=>({...x, c:cm[x.id]}));
       // nur zwischen den an diesem Tag sichtbaren Kategorien tauschen
       const vd=rolesOfDay(ev,day).map(x=>x.id), vis=vd.includes(el.dataset.r)?vd:list.map(x=>x.id), j=vis.indexOf(el.dataset.r), other=vis[j+Number(el.dataset.dir)];
       if(other==null) break;
