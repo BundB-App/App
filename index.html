@@ -323,7 +323,7 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .qb{background:var(--surface);color:var(--ink);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;display:grid;gap:14px;
   padding:18px max(18px,env(safe-area-inset-right,0px)) 18px max(18px,env(safe-area-inset-left,0px));box-shadow:0 20px 50px rgb(0 0 0 / .3)}
 .qb-list{display:grid;gap:6px;max-height:220px;overflow:auto}
-.av-list{display:grid;gap:6px;max-height:min(55vh,460px);overflow:auto}
+.av-list{display:grid;gap:6px;max-height:min(55vh,460px);overflow:auto;align-content:start}
 .av-row{border:1px solid var(--line);border-radius:9px;padding:9px 12px;display:grid;gap:4px}
 .av-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .qb-art{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer}
@@ -346,8 +346,16 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
   .fabs{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
   body[data-area="home"] .fabs{bottom:calc(20px + env(safe-area-inset-bottom,0px))}
   .fab{padding:12px 16px}
-  .qb-back{align-items:flex-end;padding:0}
-  .qb{border-radius:16px 16px 0 0;width:100%;max-height:92%;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+  /* Fenster (Schnellsuche, Schnell buchen …) sitzen im sichtbaren Bereich über der Tastatur: --vvt/--vvh aus visualViewport */
+  .qb-back{align-items:flex-end;padding:0;inset:auto 0 auto 0;top:var(--vvt,0px);height:var(--vvh,100%)}
+  .qb{border-radius:16px 16px 0 0;width:100%;max-height:calc(var(--vvh,100vh) - 12px);padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+  body.kb .qb{padding-bottom:12px}
+  /* Tastatur offen: Fenster oben anheften. Sonst schrumpft es beim Tippen (kürzere Trefferliste) und das Feld rutscht nach unten. */
+  body.kb .qb-back{align-items:flex-start}
+  body.kb .qb{border-radius:0 0 16px 16px}
+  /* Schnellsuche: feste Höhe, die Liste füllt den Rest, damit das Suchfeld beim Tippen nicht springt */
+  .qb.av{height:calc(var(--vvh,100vh) - 12px);grid-template-rows:auto auto auto auto minmax(0,1fr);align-content:start}
+  .qb.av .av-list{max-height:none;min-height:0}
   .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 }
 @media (max-width:760px){
@@ -1269,6 +1277,11 @@ function qbBook(){
   toast(`${QB_DIRTXT(mv.qty)} ${fmt(Math.abs(mv.qty))} ${uL(a,qty)} ${a.name} · ${mv.reason}${opened.length?` · ${opened.length/2} Kasten angebrochen`:''}`, {label:'Rückgängig', fn:()=>{ del('movements',mv.id); opened.forEach(m=>del('movements',m.id)); persist(); render(); toast('Buchung zurückgenommen'); }});
 }
 const QB_DIRTXT = q => q<0 ? '−' : '+';
+/* iPhone: Tastatur verkleinert den sichtbaren Bereich. Fenster und Listen daran ausrichten, damit das Eingabefeld sichtbar bleibt. */
+function setVV(){ const v = window.visualViewport, h = v ? v.height : innerHeight, t = v ? v.offsetTop : 0, r = document.documentElement.style;
+  r.setProperty('--vvh', h+'px'); r.setProperty('--vvt', t+'px'); document.body.classList.toggle('kb', innerHeight - h > 120); }
+if(window.visualViewport){ visualViewport.addEventListener('resize', setVV); visualViewport.addEventListener('scroll', setVV); }
+window.addEventListener('resize', setVV); setVV();
 document.addEventListener('keydown', e=>{ if(AV && e.key==='Escape') avClose(); if(tlDayId!=null && e.key==='Escape') tlClose(); if(pq && e.key==='Escape') pqClose(); if(QB && e.key==='Escape') qbClose(); if(QB && e.key==='Enter' && e.target.id==='qb-qty'){ e.preventDefault(); qbBook(); } });
 
 
@@ -2408,12 +2421,12 @@ function avListHtml(){
 }
 function renderAV(){
   if(!AV) return;
-  $('#qbRoot').innerHTML = `<div class="qb-back" data-act="avBack"><div class="qb" role="dialog" aria-modal="true" aria-labelledby="av-h">
+  $('#qbRoot').innerHTML = `<div class="qb-back" data-act="avBack"><div class="qb av" role="dialog" aria-modal="true" aria-labelledby="av-h">
     <div class="row spread"><h2 id="av-h">Verfügbarkeit</h2><button class="btn sm" data-act="avClose">Schließen</button></div>
     <div class="grid" style="grid-template-columns:1fr 1fr">
       <label class="f">Von<input type="date" id="av-from" value="${esc(AV.from)}"></label>
       <label class="f">Bis<input type="date" id="av-to" value="${esc(AV.to)}"></label></div>
-    <label class="f">Leistung<input id="av-q" type="search" placeholder="z. B. Faltzelt, Gas Grill (leer = alle mit Bestand)" value="${esc(AV.q)}" autocomplete="off"></label>
+    <label class="f">Leistung<input id="av-q" type="search" placeholder="z. B. Faltzelt (leer = alle)" value="${esc(AV.q)}" autocomplete="off"></label>
     <div class="small muted">Frei = Bestand minus Entnahmen anderer Veranstaltungen im Zeitraum. „Geplant“ ist noch nicht entnommen.</div>
     <div class="av-list" id="av-list">${avListHtml()}</div>
   </div></div>`;

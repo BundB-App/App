@@ -119,6 +119,7 @@ pdf.js 3.11.174 (cdnjs), tesseract.js 5.1.1 (jsDelivr, Sprache `deu`), SheetJS x
 - Schriften: Barlow Condensed (Zahlen/Überschriften), IBM Plex Sans/Mono.
 - Mobil: untere Tab-Leiste, Safe-Area-Insets beachten, Mindestbreite 390 px testen.
 - **Eingabefelder auf Touch-Geräten mindestens 16 px** (`@media (hover:none) and (pointer:coarse)`), sonst zoomt Safari beim Antippen hinein. Test `tests/e2e/kein-zoom.e2e.mjs` (Gerät mit `touch:true`).
+- **Fenster/Bottom-Sheets und iPhone-Tastatur:** `setVV` setzt `--vvh`/`--vvt` aus `visualViewport` und `body.kb` bei offener Tastatur; `.qb-back` sitzt im sichtbaren Bereich, bei offener Tastatur oben angeheftet, die Schnellsuche (`.qb.av`) hat feste Höhe. Sonst schrumpft das Fenster beim Tippen (kürzere Trefferliste) und das Feld rutscht unter die Tastatur. Test `tests/e2e/tastatur.e2e.mjs` (Tastatur simuliert).
 
 ## Offene Ideen / nächste Etappen
 
