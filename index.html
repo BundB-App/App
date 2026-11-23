@@ -320,6 +320,9 @@ body[data-area="home"] .fab small{display:block;margin-top:3px}
 .qb{background:var(--surface);color:var(--ink);border-radius:14px;width:min(560px,100%);max-height:calc(100% - 32px);overflow:auto;display:grid;gap:14px;
   padding:18px max(18px,env(safe-area-inset-right,0px)) 18px max(18px,env(safe-area-inset-left,0px));box-shadow:0 20px 50px rgb(0 0 0 / .3)}
 .qb-list{display:grid;gap:6px;max-height:220px;overflow:auto}
+.av-list{display:grid;gap:6px;max-height:min(55vh,460px);overflow:auto}
+.av-row{border:1px solid var(--line);border-radius:9px;padding:9px 12px;display:grid;gap:4px}
+.av-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .qb-art{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;cursor:pointer}
 .qb-art:focus-visible{outline:2px solid var(--accent)}
 .qb-art[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
@@ -401,7 +404,7 @@ button.stat.need.cat[aria-expanded="true"]{border-color:var(--accent);box-shadow
 <main class="wrap" id="view"></main>
 <div class="fabs" id="fabs">
   <button class="fab fab-lager" id="fab" data-act="qbOpen" aria-label="Schnellbuchung Lager"><b>±</b><span class="fab-t">Schnell buchen <small>Lager</small></span></button>
-  <button class="fab fab-personal" data-act="pqOpen" aria-label="Schnellbuchung Personal"><b>+</b><span class="fab-t">Schnell buchen <small>Personal</small></span></button>
+  <button class="fab fab-personal fab-search" data-act="avOpen" aria-label="Verfügbarkeit von Leistungen suchen"><b>⌕</b><span class="fab-t">Schnell suchen <small>Verfügbarkeit</small></span></button>
 </div>
 <div id="qbRoot"></div>
 <div class="toast" id="toast" hidden></div>
@@ -1263,7 +1266,7 @@ function qbBook(){
   toast(`${QB_DIRTXT(mv.qty)} ${fmt(Math.abs(mv.qty))} ${uL(a,qty)} ${a.name} · ${mv.reason}${opened.length?` · ${opened.length/2} Kasten angebrochen`:''}`, {label:'Rückgängig', fn:()=>{ del('movements',mv.id); opened.forEach(m=>del('movements',m.id)); persist(); render(); toast('Buchung zurückgenommen'); }});
 }
 const QB_DIRTXT = q => q<0 ? '−' : '+';
-document.addEventListener('keydown', e=>{ if(tlDayId!=null && e.key==='Escape') tlClose(); if(pq && e.key==='Escape') pqClose(); if(QB && e.key==='Escape') qbClose(); if(QB && e.key==='Enter' && e.target.id==='qb-qty'){ e.preventDefault(); qbBook(); } });
+document.addEventListener('keydown', e=>{ if(AV && e.key==='Escape') avClose(); if(tlDayId!=null && e.key==='Escape') tlClose(); if(pq && e.key==='Escape') pqClose(); if(QB && e.key==='Escape') qbClose(); if(QB && e.key==='Enter' && e.target.id==='qb-qty'){ e.preventDefault(); qbBook(); } });
 
 
 /* ===================== Bestand aus Excel / CSV ===================== */
@@ -2370,6 +2373,47 @@ function bkPanel(){
         ${bkBusy && bkBusy!=='auto' ? `<div class="small muted">${esc(bkBusy)}</div>` : ''}
       </div></details>
   </div>`;
+}
+
+/* ===================== Schnellsuche Verfügbarkeit (Startseite) ===================== */
+/* Welche Leistungen (Geräte, Zelte …) sind in einem Zeitraum frei? Frei = eigener Bestand minus Entnahmen
+   (Reservierungen) von Veranstaltungen, die sich mit dem Zeitraum überschneiden. Nur geplante Veranstaltungen
+   werden als Hinweis gezeigt („knapp“), weil Vorrang erst mit „Aus Lager entnehmen“ entsteht. */
+let AV = null;
+function avOpen(){ AV = {from:today(), to:today(), q:''}; renderAV(); setTimeout(()=>$('#av-q')?.focus(), 30); }
+function avClose(){ AV = null; $('#qbRoot').innerHTML = ''; }
+function avCalc(){
+  const w = {from:AV.from, to: AV.to && AV.to>=AV.from ? AV.to : AV.from};
+  const own = rvOwned(), taken = {}, planned = {}, by = {};
+  for(const e of live('ekEvents')){ if(!rvOverlap(e, w)) continue;
+    if(e.rv && !e.rv.back) for(const [a,q] of Object.entries(e.rv.items||{})){ taken[a]=(taken[a]||0)+Number(q||0); (by[a]=by[a]||[]).push({e, q:Number(q||0), taken:true}); }
+    else if(!e.rv) for(const [a,q] of Object.entries(rvNeed(e.id).need)){ planned[a]=(planned[a]||0)+q; (by[a]=by[a]||[]).push({e, q, taken:false}); }
+  }
+  const qn = normText(AV.q);
+  return live('articles').filter(a=>kindOf(a)==='leistung' && (qn ? artMatch(a, qn) : (own[a.id]||0)>0))
+    .map(a=>{ const total = Math.max(0, own[a.id]||0), free = Math.max(0, total-(taken[a.id]||0));
+      return {a, total, free, planned: planned[a.id]||0, by: by[a.id]||[]}; })
+    .sort((x,y)=>x.a.name.localeCompare(y.a.name,'de'));
+}
+function avListHtml(){
+  const rows = avCalc();
+  if(!rows.length) return `<div class="small muted">${AV.q ? 'Keine Leistung gefunden.' : 'Keine Leistungen mit Bestand.'}</div>`;
+  return rows.map(r=>{ const cls = !r.free ? 'bad' : r.planned > r.free ? 'warn' : 'ok';
+    return `<div class="av-row"><div class="av-h"><b>${esc(r.a.name)}</b><span class="pill ${cls}">${fmt(r.free,3)} von ${fmt(r.total,3)} frei</span></div>
+      ${r.by.length?`<div class="small muted">${r.by.map(x=>`${fmt(x.q,3)} ${x.taken?'entnommen':'geplant'} bei „${esc(x.e.name)}“ (${rvSpan(x.e)})`).join(' · ')}</div>`:''}
+      ${r.planned > r.free && r.free ? `<div class="small" style="color:var(--warn)">Knapp: geplant sind ${fmt(r.planned,3)}, frei ${fmt(r.free,3)}.</div>`:''}</div>`; }).join('');
+}
+function renderAV(){
+  if(!AV) return;
+  $('#qbRoot').innerHTML = `<div class="qb-back" data-act="avBack"><div class="qb" role="dialog" aria-modal="true" aria-labelledby="av-h">
+    <div class="row spread"><h2 id="av-h">Verfügbarkeit</h2><button class="btn sm" data-act="avClose">Schließen</button></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <label class="f">Von<input type="date" id="av-from" value="${esc(AV.from)}"></label>
+      <label class="f">Bis<input type="date" id="av-to" value="${esc(AV.to)}"></label></div>
+    <label class="f">Leistung<input id="av-q" type="search" placeholder="z. B. Faltzelt, Gas Grill (leer = alle mit Bestand)" value="${esc(AV.q)}" autocomplete="off"></label>
+    <div class="small muted">Frei = Bestand minus Entnahmen anderer Veranstaltungen im Zeitraum. „Geplant“ ist noch nicht entnommen.</div>
+    <div class="av-list" id="av-list">${avListHtml()}</div>
+  </div></div>`;
 }
 
 /* ===================== Reservierungen ===================== */
@@ -3513,6 +3557,9 @@ document.addEventListener('click', async e=>{
       if(src==='__pick'){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange=async ()=>{ const f=inp.files[0]; if(f) run(await f.text()); }; inp.click(); }
       else if(src){ bkBusy='Backup wird geladen …'; render(); const b = await DBX.download(src); if(!b){ bkBusy=''; toast('Backup nicht gefunden.'); render(); return; } run(await b.text()); }
       break; }
+    case 'avOpen': avOpen(); break;
+    case 'avClose': avClose(); break;
+    case 'avBack': if(e.target===el) avClose(); break;
     case 'rvOpen': rvId=id; view='rvEvent'; render(); window.scrollTo(0,0); break;
     case 'rvTake': { const c=rvTake(rvId); const y=scrollY; render(); scrollTo(0,y);
       toast(c && c.conflicts.length ? `Entnommen, aber ACHTUNG: bei ${c.conflicts.length} Leistung${c.conflicts.length>1?'en':''} reicht das Lager nicht.` : 'Leistungen aus dem Lager entnommen. Diese Veranstaltung hat Vorrang.'); break; }
@@ -3620,6 +3667,7 @@ document.addEventListener('input', e=>{
     if(t.id==='pq-rate'){ pq.rate=t.value; return; }
     if(/^pq-ev-/.test(t.id) && pq.newEv){ pq.newEv[t.id.slice(6)]=t.value; return; }
   }
+  if(AV && t.id==='av-q'){ AV.q = t.value; $('#av-list').innerHTML = avListHtml(); return; }
   if(t.id==='search' || t.id==='invq'){ if(t.id==='search') search=t.value; else invQ=t.value; const id=t.id, pos=t.selectionStart; render(); const s=$('#'+id); if(s){ s.focus(); s.setSelectionRange(pos,pos); } return; }
   if(t.dataset.inv){ invCounts[t.dataset.inv]=t.value; const soll=stockMap()[t.dataset.inv]||0; const d=parseNum(t.value)-soll; const cell=$('#diff-'+t.dataset.inv);
     cell.innerHTML = t.value===''||isNaN(d) ? '' : `<b class="${d>=0?'plus':'minus'}">${d>0?'+':''}${fmt(d,3)}</b>`;
@@ -3642,6 +3690,7 @@ document.addEventListener('change', e=>{
   if(t.id==='onlyLow'){ onlyLow=t.checked; render(); return; }
   if(t.id==='hideSvc'){ hideSvc=t.checked; render(); return; }
   if(t.id==='mvFilter'){ mvFilter=t.value; render(); return; }
+  if(AV && (t.id==='av-from' || t.id==='av-to')){ AV[t.id.slice(3)] = t.value || today(); if(t.id==='av-from' && AV.to < AV.from){ AV.to = AV.from; $('#av-to').value = AV.from; } $('#av-list').innerHTML = avListHtml(); return; }
   if(t.id==='bk-on'){ CFG.bkOn=t.checked; saveCfg(); render(); if(t.checked){ toast('Backup eingeschaltet'); bkAuto(); } else toast('Backup auf diesem Gerät ausgeschaltet'); return; }
   if(t.id==='bk-int'){ CFG.bkInterval=t.value; saveCfg(); render(); return; }
   if(t.id==='bk-keep'){ const n=parseInt(t.value,10); CFG.bkKeep = n>0 ? Math.min(200,n) : 13; saveCfg(); render(); return; }

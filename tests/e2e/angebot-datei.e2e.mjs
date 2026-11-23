@@ -7,7 +7,7 @@ const personalBefore = seedRealData();
 const A187 = DBXDIR + 'Angebote/2026/A_187_Karnevalsverein Langebrück e.V..pdf';
 putF('/Apps/BundB App/Angebote/Liegt_im_Ordner.pdf', readFileSync(A187));   // Ordner-Prüfung ist abgeschaltet: darf nicht angefasst werden
 const copy = join(OUT, 'Kopie anderer Name.pdf'); writeFileSync(copy, readFileSync(A187));
-const csv = join(OUT, 'A300.csv'); writeFileSync(csv, 'Bezeichnung;Menge;Einheit;Einzelpreis;Gesamt;Kunde;Angebotsnr;Datum\r\nFaltzelt creme 3x3m;2;Stück;80,00;160,00;Kunde Q;A-300;01.11.2026\r\nCoca Cola 12 x 1l;3;Kästen;15,96;47,88;;;\r\n');
+const csv = join(OUT, 'A300.csv'); writeFileSync(csv, 'Bezeichnung;Menge;Einheit;Einzelpreis;Gesamt;Kunde;Angebotsnr;Datum\r\nFaltzelt schwarz 3x3m;2;Stück;80,00;160,00;Kunde Q;A-300;01.11.2026\r\nCoca Cola 12 x 1l;3;Kästen;15,96;47,88;;;\r\n');
 
 const A = await device(); const pa = A.page;
 await pa.waitForTimeout(1500);
@@ -38,15 +38,15 @@ await pa.click('a.back'); await pa.click('[data-act=ekNew]'); await pa.fill('#ek
 await pickFile(pa, '[data-act=ekReadOffer]', csv);
 await pa.waitForFunction(() => ekLinesOf(rvId).length === 2, null, { timeout: 20000 });
 const m = await pa.evaluate(() => { const e = ES.ekEvents[rvId]; return [e.name, e.date, e.offerNo, rvCalc(e.id).rows.map(r => r.a.name + ':' + r.need).join(',')]; });
-assert.deepEqual(m.slice(0, 3), ['Sommerfest Q', '2026-12-05', 'A-300']); assert.equal(m[3], 'Faltzelt creme 3x3m:2'); ok('Manuelle Veranstaltung + Angebot einlesen: Name/Datum bleiben, Faltzelt reserviert');
+assert.deepEqual(m.slice(0, 3), ['Sommerfest Q', '2026-12-05', 'A-300']); assert.equal(m[3], 'Faltzelt schwarz 3x3m:2'); ok('Manuelle Veranstaltung + Angebot einlesen: Name/Datum bleiben, Faltzelt reserviert');
 await pa.click('#tabs [data-go="einkauf"]'); assert.equal(await pa.$$eval('.item-card', c => c.length), 2); ok('Beide Veranstaltungen auch unter Einkauf');
 
 // Einkauf, Packliste, PDF laufen weiter
-await pa.click('.item-card:has-text("Karneval")');
+await pa.evaluate(() => document.querySelectorAll('details.grp').forEach(d => d.open = true)); await pa.click('.item-card:has-text("Karneval")');
 const cola = await pa.evaluate(() => ekCalc(ekId).rows.find(r => /Coca Cola/.test(r.art.name)));
 assert.ok(cola && cola.needText === '5 Kästen'); await pa.click('[data-act=ekPdf]'); await pa.waitForSelector('[data-act=ekDownload]', { timeout: 15000 });
 assert.ok([...files.keys()].some(k => k.startsWith(BASE + 'einkauf/') && k.endsWith('.pdf'))); ok('Einkaufsliste + PDF wie bisher');
-await pa.click('#tabs [data-go="packliste"]'); await pa.click('.item-card:has-text("Karneval")');
+await pa.click('#tabs [data-go="packliste"]'); await pa.evaluate(() => document.querySelectorAll('details.grp').forEach(d => d.open = true)); await pa.click('.item-card:has-text("Karneval")');
 assert.ok(await pa.evaluate(() => pkCalc(pkId).list.length > 10)); ok('Packliste wie bisher');
 
 // iPhone

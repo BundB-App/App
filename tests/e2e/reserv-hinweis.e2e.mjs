@@ -9,7 +9,7 @@ const badge = p => p.$eval('#tabs [data-go="reserv"]', b => b.dataset.bad || '')
 assert.equal(await badge(pa), ''); ok('Ohne Konflikt: kein Hinweis');
 // zwei Veranstaltungen im selben Zeitraum brauchen den einzigen Gas Grill
 const ids = await pa.evaluate(() => { const g = live('articles').find(a => a.name === 'Gas Grill').id, out = [];
-  for (const n of ['Fest A', 'Fest B']) { const e = put('ekEvents', { id: uid(), name: n, date: '2026-11-21', from: '2026-11-20', to: '2026-11-22', party: '', offerNo: '', file: '', note: '' });
+  for (const n of ['Fest A', 'Fest B']) { const e = put('ekEvents', { id: uid(), name: n, date: '2027-03-21', from: '2027-03-20', to: '2027-03-22', party: '', offerNo: '', file: '', note: '' });
     put('ekLines', { id: uid(), eventId: e.id, desc: '', qty: stockMap()[g] || 1, unit: '', articleId: g, how: 'manuell', src: 'reserv', pos: 1 }); out.push(e.id); }
   persist(); render(); return out; });
 assert.equal(await badge(pa), ''); ok('Beide nur geplant: noch kein roter Hinweis (orange „knapp“ in der Veranstaltung)');
